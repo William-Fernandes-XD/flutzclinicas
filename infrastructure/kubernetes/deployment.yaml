@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flutz-backend
+  labels:
+    app: flutz-backend
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: flutz-backend
+  template:
+    metadata:
+      labels:
+        app: flutz-backend
+    spec:
+      containers:
+        - name: backend
+          image: flutz-backend:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+              name: http
+          envFrom:
+            - configMapRef:
+                name: flutz-backend
+            - secretRef:
+                name: flutz-backend
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            initialDelaySeconds: 40
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi

@@ -1,0 +1,39 @@
+# Environment and secrets
+.env
+.env.local
+.env.*.local
+frontend/.env
+backend/.env
+
+# Java / Maven
+backend/target/
+backend/.mvn/wrapper/maven-wrapper.jar
+*.class
+*.jar
+*.war
+hs_err_pid*
+
+# Node
+frontend/node_modules/
+frontend/dist/
+npm-debug.log*
+yarn-error.log*
+
+# IDE / OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Generated local
+*.tmp
+uploads/
+backend/uploads/
+backend/secrets/*.json
+contas-dev.md
+login-me.json

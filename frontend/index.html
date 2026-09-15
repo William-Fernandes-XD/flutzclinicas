@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Flutz | Gestão completa para sua clínica veterinária</title>
+    <meta
+      name="description"
+      content="O Flutz é o SaaS de gestão para clínicas veterinárias: tutores, pets, agenda, atendimentos, vacinação, página pública, avaliações, chat, doações e pagamentos — com dados isolados por clínica."
+    />
+    <link rel="canonical" href="%CANONICAL_URL%" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="pt_BR" />
+    <meta property="og:site_name" content="Flutz" />
+    <meta
+      property="og:title"
+      content="Flutz | Gestão completa para sua clínica veterinária"
+    />
+    <meta
+      property="og:description"
+      content="Plataforma de gestão para clínicas veterinárias: operação, página pública e assinatura em um só lugar."
+    />
+    <meta property="og:image" content="%OG_IMAGE_URL%" />
+    <meta property="og:url" content="%CANONICAL_URL%" />
+    <meta name="twitter:card" content="summary" />
+    <meta
+      name="twitter:title"
+      content="Flutz | Gestão completa para sua clínica veterinária"
+    />
+    <meta
+      name="twitter:description"
+      content="SaaS de gestão para clínicas veterinárias, com isolamento de dados por empresa."
+    />
+    <meta name="twitter:image" content="%OG_IMAGE_URL%" />
+    <meta name="theme-color" content="#7828C8" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <script>
+      try {
+        if (localStorage.getItem("theme") === "dark") {
+          document.documentElement.classList.add("dark");
+          document.documentElement.style.colorScheme = "dark";
+        }
+      } catch (error) {
+        /* preferência de tema indisponível */
+      }
+    </script>
+    <div id="boot-splash" aria-busy="true" aria-live="polite">
+      <style>
+        #boot-splash {
+          position: fixed;
+          inset: 0;
+          z-index: 9999;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          background: #fbf7ff;
+          font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+        }
+        html.dark #boot-splash {
+          background: #0f1115;
+        }
+        #boot-splash .boot-logo {
+          width: min(18rem, 78vw);
+          height: auto;
+          animation: boot-float 2.4s ease-in-out infinite;
+          filter: drop-shadow(0 18px 28px rgba(120, 40, 200, 0.22));
+        }
+        #boot-splash .boot-track {
+          margin-top: 2.5rem;
+          width: min(14rem, 70vw);
+          height: 0.4rem;
+          overflow: hidden;
+          border-radius: 999px;
+          background: rgba(120, 40, 200, 0.14);
+        }
+        #boot-splash .boot-bar {
+          height: 100%;
+          width: 42%;
+          border-radius: inherit;
+          background: linear-gradient(90deg, #9b4de0, #7828c8, #a855f7, #7828c8);
+          background-size: 200% 100%;
+          animation: boot-bar 1.15s ease-in-out infinite;
+          box-shadow: 0 0 16px rgba(120, 40, 200, 0.45);
+        }
+        @keyframes boot-float {
+          0%,
+          100% {
+            transform: translateY(0) scale(1);
+          }
+          50% {
+            transform: translateY(-6px) scale(1.02);
+          }
+        }
+        @keyframes boot-bar {
+          0% {
+            transform: translateX(-120%);
+          }
+          100% {
+            transform: translateX(280%);
+          }
+        }
+      </style>
+      <img class="boot-logo" src="/logo-flutz-boot.png" alt="Flutz" width="320" height="88" />
+      <div class="boot-track"><div class="boot-bar"></div></div>
+    </div>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

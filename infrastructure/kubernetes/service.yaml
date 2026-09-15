@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: flutz-backend
+  labels:
+    app: flutz-backend
+spec:
+  type: ClusterIP
+  selector:
+    app: flutz-backend
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

@@ -1,0 +1,95 @@
+spring:
+  application:
+    name: ${APP_NAME:Flutz}
+  datasource:
+    url: jdbc:postgresql://${DATABASE_HOST:localhost}:${DATABASE_PORT:5432}/${DATABASE_NAME:flutz}?currentSchema=flutz
+    username: ${DATABASE_USERNAME:postgres}
+    password: ${DATABASE_PASSWORD:}
+  jpa:
+    hibernate:
+      ddl-auto: none
+    open-in-view: false
+    properties:
+      hibernate.default_schema: flutz
+  flyway:
+    enabled: true
+    schemas: flutz
+    default-schema: flutz
+    locations: classpath:db/migration
+  mail:
+    default-encoding: UTF-8
+    host: ${MAIL_HOST:}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail.smtp.auth: ${MAIL_SMTP_AUTH:true}
+      mail.smtp.starttls.enable: ${MAIL_STARTTLS:true}
+
+  servlet:
+    multipart:
+      max-file-size: 2MB
+      max-request-size: 2MB
+
+server:
+  port: ${SERVER_PORT:8080}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui
+
+flutz:
+  app:
+    name: ${APP_NAME:Flutz}
+    env: ${APP_ENV:development}
+    url: ${APP_URL:http://localhost:8080}
+    frontend-url: ${FRONTEND_URL:http://localhost:5173}
+  company:
+    name: ${COMPANY_NAME:UpVibe}
+    url: ${COMPANY_URL:https://www.upvibe.blog.br/}
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
+  jwt:
+    secret: ${JWT_SECRET:}
+    expiration-ms: ${JWT_EXPIRATION:${JWT_EXPIRATION_MS:86400000}}
+  security:
+    password-reset-token-expiration-minutes: ${PASSWORD_RESET_TOKEN_EXPIRATION_MINUTES:30}
+    max-login-attempts: ${MAX_LOGIN_ATTEMPTS:0}
+    login-lock-increment-seconds: ${LOGIN_LOCK_INCREMENT_SECONDS:5}
+  mail:
+    from: ${MAIL_FROM:}
+    from-name: ${MAIL_FROM_NAME:Flutz}
+  admin:
+    name: ${INITIAL_ADMIN_NAME:}
+    email: ${INITIAL_ADMIN_EMAIL:}
+    password: ${INITIAL_ADMIN_PASSWORD:}
+  database:
+    host: ${DATABASE_HOST:localhost}
+    name: ${DATABASE_NAME:flutz}
+  media:
+    dir: ${FLUTZ_MEDIA_DIR:uploads}
+  drive:
+    enabled: ${GOOGLE_DRIVE_ENABLED:false}
+    folder-id: ${GOOGLE_DRIVE_FOLDER_ID:}
+    credentials: ${GOOGLE_APPLICATION_CREDENTIALS:}
+  mercadopago:
+    public-key: ${MERCADOPAGO_PUBLIC_KEY:}
+    access-token: ${MERCADOPAGO_ACCESS_TOKEN:}
+    webhook-secret: ${MERCADOPAGO_WEBHOOK_SECRET:}

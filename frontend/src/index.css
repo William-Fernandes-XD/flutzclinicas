@@ -1,0 +1,200 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-brand: #7828c8;
+  --color-brand-hover: #6620ad;
+  --color-brand-soft: #f4e9ff;
+  --color-ink: #2d3748;
+  --color-muted: #4a5568;
+  --color-line: #e2e8f0;
+  --color-success: #2f855a;
+  --color-danger: #c53030;
+  --color-warning: #c05621;
+  --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  width: 100%;
+  max-width: 100%;
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+body {
+  margin: 0;
+  width: 100%;
+  max-width: 100%;
+  background: #ffffff;
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+.dark body {
+  background: #0f1115;
+  color: #e8eaed;
+}
+
+#root {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 100svh;
+}
+
+img,
+video,
+canvas {
+  max-width: 100%;
+}
+
+/* Unlayered so it beats Tailwind preflight `img { height: auto }`. */
+.brand-logo-full {
+  display: block;
+  width: 10rem !important;
+  max-width: min(10rem, 100%) !important;
+  height: 2.75rem !important;
+  object-fit: contain;
+  object-position: left center;
+}
+
+.brand-logo-mark {
+  display: block;
+  width: 2rem !important;
+  height: 2rem !important;
+  max-width: 2rem !important;
+  object-fit: contain;
+}
+
+/* Splash / loading Flutz */
+.flutz-loader-logo {
+  display: block;
+  width: min(18rem, 78vw) !important;
+  max-width: 18rem !important;
+  height: auto !important;
+  object-fit: contain;
+  animation: flutz-loader-float 2.4s ease-in-out infinite;
+  filter: drop-shadow(0 18px 28px rgba(120, 40, 200, 0.22));
+}
+
+.flutz-loader-glow {
+  background:
+    radial-gradient(ellipse 55% 40% at 50% 42%, rgba(120, 40, 200, 0.16), transparent 70%),
+    radial-gradient(ellipse 40% 30% at 50% 70%, rgba(168, 85, 247, 0.08), transparent 70%);
+  animation: flutz-loader-glow 3.2s ease-in-out infinite alternate;
+}
+
+.flutz-loader-track {
+  height: 0.4rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(120, 40, 200, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(120, 40, 200, 0.08);
+}
+
+.dark .flutz-loader-track {
+  background: rgba(167, 139, 250, 0.16);
+}
+
+.flutz-loader-bar {
+  height: 100%;
+  width: 42%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #9b4de0, #7828c8, #a855f7, #7828c8);
+  background-size: 200% 100%;
+  animation: flutz-loader-bar 1.15s ease-in-out infinite;
+  box-shadow: 0 0 16px rgba(120, 40, 200, 0.45);
+}
+
+@keyframes flutz-loader-float {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-6px) scale(1.02);
+  }
+}
+
+@keyframes flutz-loader-bar {
+  0% {
+    transform: translateX(-120%);
+    background-position: 0% 50%;
+  }
+  100% {
+    transform: translateX(280%);
+    background-position: 100% 50%;
+  }
+}
+
+@keyframes flutz-loader-glow {
+  from {
+    opacity: 0.7;
+    transform: scale(1);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1.04);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flutz-loader-logo,
+  .flutz-loader-bar,
+  .flutz-loader-glow {
+    animation: none !important;
+  }
+
+  .flutz-loader-bar {
+    width: 70%;
+    transform: none;
+    margin-inline: auto;
+  }
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 3px;
+}
+
+.app-living-bg {
+  background-color: #ffffff;
+}
+
+.dark .app-living-bg {
+  background-color: #0f1115;
+}
+
+.living-card {
+  min-width: 0;
+  border-radius: 1.6rem;
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 18px 44px -26px rgba(120, 40, 200, 0.38);
+  outline: 1px solid rgba(120, 40, 200, 0.1);
+}
+
+.dark .living-card {
+  background: rgba(24, 24, 27, 0.82);
+  outline-color: rgba(255, 255, 255, 0.06);
+}

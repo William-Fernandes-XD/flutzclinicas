@@ -1,0 +1,14 @@
+target/
+.git/
+.gitignore
+.env
+.env.*
+*.md
+.idea/
+*.iml
+.vscode/
+.mvn/
+mvnw
+mvnw.cmd
+**/.DS_Store
+**/Thumbs.db

@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: flutz-backend
+  labels:
+    app: flutz-backend
+data:
+  APP_NAME: "Flutz"
+  APP_ENV: "production"
+  SERVER_PORT: "8080"
+  DATABASE_HOST: "flutz-postgres"
+  DATABASE_PORT: "5432"
+  DATABASE_NAME: "flutz"
+  MAIL_HOST: "smtp.exemplo.com"
+  MAIL_PORT: "587"
+  MAIL_FROM_NAME: "Flutz"
+  LOGIN_LOCK_INCREMENT_SECONDS: "5"
+  PASSWORD_RESET_TOKEN_EXPIRATION_MINUTES: "30"
+  COMPANY_NAME: "UpVibe"
+  COMPANY_URL: "https://www.upvibe.blog.br/"
