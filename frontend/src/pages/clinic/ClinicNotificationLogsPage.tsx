@@ -7,7 +7,6 @@ import {
   Clock,
   Eye,
   MessageSquare,
-  ScrollText,
   Search,
   Wallet,
   type LucideIcon,
@@ -313,7 +312,6 @@ export function ClinicNotificationLogsPage() {
       ) : !all.length ? (
         <div className="mt-5">
           <EmptyState
-            icon={<ScrollText className="size-6" />}
             title="Sem registros ainda"
             description="Quando houver marcações na agenda ou mensagens notificadas, o histórico aparece aqui."
           />

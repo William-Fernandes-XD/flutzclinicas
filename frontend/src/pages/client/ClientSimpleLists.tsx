@@ -1,15 +1,11 @@
 ﻿import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  Building2,
   CalendarDays,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
   Circle,
-  ClipboardList,
-  Clock3,
   Download,
-  Eye,
   FileSpreadsheet,
   FileText,
   MapPin,
@@ -17,9 +13,7 @@ import {
   PawPrint,
   Search,
   ShieldCheck,
-  Star,
   Syringe,
-  UserRound,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -34,7 +28,6 @@ import { Surface } from "../../components/ui/Field";
 import { Modal } from "../../components/ui/Modal";
 import { corStatusAgenda, statusAgenda, tomStatus } from "../../lib/agenda";
 import { exportTable } from "../../lib/export";
-import { http } from "../../lib/http";
 import { api, type AgendaSolicitacao, type AvaliacaoPendente, type VaccinationRow } from "../../services/api";
 import { useToast } from "../../providers/ToastProvider";
 

@@ -63,7 +63,7 @@ export function ClinicCatalogosPage() {
     enabled: tipo === "racas" && especieId != null,
   });
 
-  const sugestoes = useMemo(() => {
+  const sugestoes = useMemo((): CatalogPreset[] => {
     if (tipo === "racas") {
       if (!especieId) return [];
       const especie = (especies.data ?? []).find((item) => item.id === especieId);

@@ -21,7 +21,7 @@ import { EmptyState, LoadingState } from "../../components/ui/EmptyState";
 import { Modal } from "../../components/ui/Modal";
 import { formatKm, isoDate } from "../../lib/agenda";
 import { mediaUrl } from "../../lib/media";
-import { api, type AgendaClinic, type ClinicaAvaliacao } from "../../services/api";
+import { api, type AgendaClinic } from "../../services/api";
 
 type Ordenacao = "distancia" | "nota" | "nome";
 type TipoAtendimento = "presencial" | "telemedicina";

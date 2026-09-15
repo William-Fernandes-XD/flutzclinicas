@@ -10,7 +10,6 @@ import {
   Share2,
   ShieldCheck,
   Stethoscope,
-  type LucideIcon,
 } from "lucide-react";
 import type { MouseEvent, ReactNode } from "react";
 import { Link } from "react-router-dom";

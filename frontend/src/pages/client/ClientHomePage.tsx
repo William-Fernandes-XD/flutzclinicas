@@ -136,7 +136,7 @@ export function ClientHomePage() {
                   <div className="flex min-w-0 items-start gap-3 sm:items-center">
                     <PetPhoto
                       especie={item.especie}
-                      seed={item.petId ?? item.key}
+                      seed={item.petId ?? 0}
                       src={item.fotoUrl}
                       className="size-12 rounded-full"
                     />
