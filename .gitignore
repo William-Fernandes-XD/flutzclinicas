@@ -35,5 +35,6 @@ logs/
 uploads/
 backend/uploads/
 backend/secrets/*.json
+infrastructure/kubernetes/secret.yaml
 contas-dev.md
 login-me.json
