@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import br.com.upvibe.flutz.clinic.NotificationService;
 import br.com.upvibe.flutz.config.AppProperties;
 import br.com.upvibe.flutz.mail.EmailService;
 import br.com.upvibe.flutz.security.AuthHolder;
@@ -34,11 +35,18 @@ public class LgpdService {
     private final JdbcTemplate jdbc;
     private final EmailService email;
     private final AppProperties properties;
+    private final NotificationService notifications;
 
-    public LgpdService(JdbcTemplate jdbc, EmailService email, AppProperties properties) {
+    public LgpdService(
+            JdbcTemplate jdbc,
+            EmailService email,
+            AppProperties properties,
+            NotificationService notifications
+    ) {
         this.jdbc = jdbc;
         this.email = email;
         this.properties = properties;
+        this.notifications = notifications;
     }
 
     public List<SolicitacaoLgpd> listarMinhas() {
@@ -67,20 +75,25 @@ public class LgpdService {
         }
 
         if ("REVOGACAO_CONSENTIMENTO".equals(tipo)) {
+            SolicitacaoLgpd criada = inserir(auth, tipo, detalhe, "CONCLUIDA");
+            notificarCriacao(criada, auth);
             String tabela = auth.tutor() ? "cliente" : "colaborador";
             String colunaId = auth.tutor() ? "cliente_id" : "colaborador_id";
             jdbc.update(
                     "UPDATE flutz." + tabela + " SET permitir_notificacoes = FALSE WHERE " + colunaId + " = ?",
                     auth.atorId()
             );
-            return new ResultadoSolicitacao(inserir(auth, tipo, detalhe, "CONCLUIDA"), null);
+            return new ResultadoSolicitacao(criada, null);
         }
         if ("ACESSO".equals(tipo) || "PORTABILIDADE".equals(tipo)) {
             PacotePortabilidade pacote = pacote(auth, "ACESSO".equals(tipo));
-            return new ResultadoSolicitacao(inserir(auth, tipo, detalhe, "CONCLUIDA"), pacote);
+            SolicitacaoLgpd criada = inserir(auth, tipo, detalhe, "CONCLUIDA");
+            notificarCriacao(criada, auth);
+            return new ResultadoSolicitacao(criada, pacote);
         }
 
         SolicitacaoLgpd criada = inserir(auth, tipo, detalhe, "ABERTA");
+        notificarCriacao(criada, auth);
         if ("EXCLUSAO".equals(tipo) || "ANONIMIZACAO".equals(tipo)) {
             avisarAdministracao(criada, auth);
         }
@@ -140,7 +153,9 @@ public class LgpdService {
         if (alteradas == 0) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Solicitação não encontrada");
         }
-        return porId(id);
+        SolicitacaoLgpd atualizada = porId(id);
+        notificarStatus(atualizada);
+        return atualizada;
     }
 
     @Transactional
@@ -153,6 +168,17 @@ public class LgpdService {
         if ("CONCLUIDA".equals(solicitacao.status())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "A solicitação já foi concluída");
         }
+
+        jdbc.update(
+                """
+                UPDATE flutz.solicitacao_titular
+                SET status_solicitacao = 'CONCLUIDA', motivo_negativa = NULL, data_conclusao = CURRENT_TIMESTAMP
+                WHERE solicitacao_titular_id = ?
+                """,
+                id
+        );
+        SolicitacaoLgpd concluidaPre = porId(id);
+        notificarStatus(concluidaPre);
 
         int statusInativo = jdbc.queryForObject(
                 "SELECT status_id FROM flutz.status WHERE LOWER(descricao) IN ('inativo', 'desativado') ORDER BY status_id LIMIT 1",
@@ -189,14 +215,6 @@ public class LgpdService {
         if (alteradas == 0) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Titular não encontrado");
         }
-        jdbc.update(
-                """
-                UPDATE flutz.solicitacao_titular
-                SET status_solicitacao = 'CONCLUIDA', motivo_negativa = NULL, data_conclusao = CURRENT_TIMESTAMP
-                WHERE solicitacao_titular_id = ?
-                """,
-                id
-        );
         jdbc.update(
                 """
                 INSERT INTO flutz.auditoria_acao
@@ -432,6 +450,38 @@ public class LgpdService {
             );
         } catch (RuntimeException ex) {
             log.error("Solicitação LGPD gravada, mas o aviso por e-mail falhou", ex);
+        }
+    }
+
+    private void notificarCriacao(SolicitacaoLgpd item, AuthPrincipal auth) {
+        try {
+            notifications.notificarLgpdCriada(
+                    item.id(),
+                    item.empresaId(),
+                    item.titularTipo(),
+                    item.titularId(),
+                    auth.nome(),
+                    item.tipoSolicitacao(),
+                    item.status()
+            );
+        } catch (RuntimeException ex) {
+            log.warn("Solicitação LGPD #{} criada, mas a notificação in-app falhou", item.id(), ex);
+        }
+    }
+
+    private void notificarStatus(SolicitacaoLgpd item) {
+        try {
+            notifications.notificarLgpdStatus(
+                    item.id(),
+                    item.empresaId(),
+                    item.titularTipo(),
+                    item.titularId(),
+                    item.tipoSolicitacao(),
+                    item.status(),
+                    item.motivoNegativa()
+            );
+        } catch (RuntimeException ex) {
+            log.warn("Solicitação LGPD #{} atualizada, mas a notificação in-app falhou", item.id(), ex);
         }
     }
 

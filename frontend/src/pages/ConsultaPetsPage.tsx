@@ -34,6 +34,7 @@ import { useToast } from "../providers/ToastProvider";
 import { api, type ConsultaPet, type PetDetail } from "../services/api";
 
 const PAGE_SIZE = 3;
+const CLINIC_LIST_SIZE = 10;
 
 export function ConsultaPetsPage() {
   const { session } = useAuth();
@@ -44,7 +45,8 @@ export function ConsultaPetsPage() {
   const [cpf, setCpf] = useState("");
   const [especieFiltro, setEspecieFiltro] = useState("");
   const [vacinaFiltro, setVacinaFiltro] = useState("");
-  const [busca, setBusca] = useState(() => (tutor ? { nome: "", cpf: "" } : null));
+  const [busca, setBusca] = useState(() => ({ nome: "", cpf: "" }));
+  const [listaPagina, setListaPagina] = useState(0);
   const [petId, setPetId] = useState<number | null>(null);
   const [modo, setModo] = useState<"info" | "vacinas" | "editar" | null>(null);
   const [pagina, setPagina] = useState(0);
@@ -55,9 +57,14 @@ export function ConsultaPetsPage() {
   const [editarEspecieId, setEditarEspecieId] = useState("");
 
   const lista = useQuery({
-    queryKey: ["consulta-pets", busca],
+    queryKey: ["consulta-pets", busca, listaPagina, tutor],
     enabled: busca != null,
-    queryFn: () => api.consultarPets(busca ?? { nome: "", cpf: "" }),
+    queryFn: () =>
+      api.consultarPets({
+        ...(busca ?? { nome: "", cpf: "" }),
+        page: listaPagina,
+        size: tutor ? 100 : CLINIC_LIST_SIZE,
+      }),
   });
   const detalhe = useQuery({
     queryKey: ["pet", petId],
@@ -123,7 +130,9 @@ export function ConsultaPetsPage() {
     },
   });
 
-  const rows = lista.data ?? [];
+  const rows = lista.data?.items ?? [];
+  const totalPets = lista.data?.total ?? rows.length;
+  const totalListaPaginas = Math.max(1, lista.data?.totalPages ?? 1);
   const especiesDisponiveis = useMemo(() => {
     const set = new Set(rows.map((item) => item.especie).filter(Boolean));
     return [...set].sort((a, b) => a.localeCompare(b));
@@ -151,6 +160,7 @@ export function ConsultaPetsPage() {
 
   function onSearch(event: FormEvent) {
     event.preventDefault();
+    setListaPagina(0);
     setBusca({ nome: nome.trim(), cpf: cpf.replace(/\D/g, "") });
   }
 
@@ -159,7 +169,8 @@ export function ConsultaPetsPage() {
     setCpf("");
     setEspecieFiltro("");
     setVacinaFiltro("");
-    setBusca(tutor ? { nome: "", cpf: "" } : null);
+    setListaPagina(0);
+    setBusca({ nome: "", cpf: "" });
   }
 
   function abrirCadastro() {
@@ -205,7 +216,7 @@ export function ConsultaPetsPage() {
         description={
           tutor
             ? "Veja, edite e acompanhe os pets da sua conta, o prontuário e a vacinação."
-            : "Busque pelo nome do pet ou pelo CPF do tutor."
+            : "Pets com atendimento ou agendamento nesta clínica. Busque pelo nome ou CPF do tutor."
         }
         actions={
           tutor ? (
@@ -323,7 +334,7 @@ export function ConsultaPetsPage() {
         <section className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-base font-semibold text-[#1f1630]">
-              {tutor ? "Seus pets" : "Pets encontrados"} ({filtrados.length})
+              {tutor ? "Seus pets" : "Pets encontrados"} ({tutor ? filtrados.length : totalPets})
             </h2>
             <div className="flex flex-wrap gap-2">
               <Button
@@ -373,6 +384,30 @@ export function ConsultaPetsPage() {
               />
             ))}
           </ul>
+
+          {!tutor && totalListaPaginas > 1 ? (
+            <div className="flex items-center justify-between gap-3 pt-2">
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={listaPagina === 0 || lista.isFetching}
+                onClick={() => setListaPagina((p) => Math.max(0, p - 1))}
+              >
+                <ChevronLeft className="size-4" /> Anterior
+              </Button>
+              <p className="text-sm text-muted">
+                Página {listaPagina + 1} de {totalListaPaginas}
+              </p>
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={listaPagina >= totalListaPaginas - 1 || lista.isFetching}
+                onClick={() => setListaPagina((p) => Math.min(totalListaPaginas - 1, p + 1))}
+              >
+                Próxima <ChevronRight className="size-4" />
+              </Button>
+            </div>
+          ) : null}
         </section>
       )}
 

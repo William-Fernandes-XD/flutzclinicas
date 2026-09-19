@@ -8,12 +8,14 @@ import {
   LifeBuoy,
   MessageSquare,
   Search,
+  Shield,
   Syringe,
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Link, useNavigate } from "react-router-dom";
+import { env } from "../../lib/env";
 import { http } from "../../lib/http";
 import { mediaUrl } from "../../lib/media";
 import { api, type AppNotification } from "../../services/api";
@@ -26,8 +28,16 @@ type FiltroNotif = "todas" | "agendamentos" | "mensagens" | "avisos";
 
 function categoria(tipo: string): FiltroNotif {
   if (tipo === "CHAT_MENSAGEM") return "mensagens";
-  if (tipo === "TICKET_SUPORTE" || tipo === "TICKET_RESPOSTA" || tipo === "ASSINATURA_D3") return "avisos";
-  if (tipo.startsWith("VACINA_") || tipo.startsWith("ASSINATURA_")) return "avisos";
+  if (
+    tipo === "TICKET_SUPORTE" ||
+    tipo === "TICKET_RESPOSTA" ||
+    tipo === "ASSINATURA_D3" ||
+    tipo === "LGPD_SOLICITACAO" ||
+    tipo === "LGPD_ATUALIZACAO"
+  ) {
+    return "avisos";
+  }
+  if (tipo.startsWith("VACINA_") || tipo.startsWith("ASSINATURA_") || tipo.startsWith("LGPD_")) return "avisos";
   if (tipo.startsWith("AGENDA_") || tipo.startsWith("ATENDIMENTO_")) return "agendamentos";
   return "avisos";
 }
@@ -54,14 +64,70 @@ export function HeaderTools({ variant }: { variant: "platform" | "clinic" | "cli
     queryKey: ["notificacoes"],
     queryFn: api.notificacoes,
     enabled: notesEnabled,
-    refetchInterval: notesEnabled ? 15000 : false,
+    refetchInterval: notesEnabled ? 60_000 : false,
   });
   const naoLidas = useQuery({
     queryKey: ["notificacoes-nao-lidas"],
     queryFn: api.notificacoesNaoLidas,
     enabled: notesEnabled,
-    refetchInterval: notesEnabled ? 15000 : false,
+    refetchInterval: notesEnabled ? 60_000 : false,
   });
+
+  useEffect(() => {
+    if (!notesEnabled) return;
+    const url = `${env.apiUrl}/api/notificacoes/stream`;
+    let source: EventSource | null = null;
+    let closed = false;
+    let ultimoNaoLidas = -1;
+    const som = new Audio("/notification_sound.mp3");
+    som.preload = "auto";
+
+    function tocarSom() {
+      try {
+        som.currentTime = 0;
+        void som.play().catch(() => {
+          /* autoplay pode ser bloqueado até interação do usuário */
+        });
+      } catch {
+        /* ignore */
+      }
+    }
+
+    function connect() {
+      if (closed) return;
+      source = new EventSource(url, { withCredentials: true });
+      source.addEventListener("notificacoes", (event) => {
+        let total = -1;
+        try {
+          const payload = JSON.parse((event as MessageEvent).data) as { naoLidas?: number };
+          total = Number(payload.naoLidas);
+        } catch {
+          total = -1;
+        }
+        if (Number.isFinite(total) && total >= 0) {
+          if (ultimoNaoLidas >= 0 && total > ultimoNaoLidas) {
+            tocarSom();
+          }
+          ultimoNaoLidas = total;
+        }
+        void queryClient.invalidateQueries({ queryKey: ["notificacoes"] });
+        void queryClient.invalidateQueries({ queryKey: ["notificacoes-nao-lidas"] });
+      });
+      source.onerror = () => {
+        source?.close();
+        source = null;
+        if (!closed) {
+          window.setTimeout(connect, 5000);
+        }
+      };
+    }
+
+    connect();
+    return () => {
+      closed = true;
+      source?.close();
+    };
+  }, [notesEnabled, queryClient]);
 
   const marcar = useMutation({
     mutationFn: (id: number) => api.marcarNotificacaoLida(id),
@@ -382,21 +448,25 @@ function TipoIcone({ tipo }: { tipo: string }) {
   const Icon =
     tipo === "TICKET_SUPORTE" || tipo === "TICKET_RESPOSTA"
       ? LifeBuoy
-      : cat === "mensagens"
-        ? MessageSquare
-        : cat === "agendamentos"
-          ? CalendarDays
-          : cat === "avisos" && tipo.startsWith("VACINA_")
-            ? Syringe
-            : Bell;
+      : tipo.startsWith("LGPD_")
+        ? Shield
+        : cat === "mensagens"
+          ? MessageSquare
+          : cat === "agendamentos"
+            ? CalendarDays
+            : cat === "avisos" && tipo.startsWith("VACINA_")
+              ? Syringe
+              : Bell;
   const cores =
     tipo === "TICKET_SUPORTE" || tipo === "TICKET_RESPOSTA"
       ? "bg-[#efe8ff] text-[#7828c8]"
-      : cat === "mensagens"
-        ? "bg-[#e8f6ee] text-[#1f8a4c]"
-        : cat === "agendamentos"
-          ? "bg-[#efe8ff] text-[#7828c8]"
-          : "bg-[#fff3e0] text-[#c27803]";
+      : tipo.startsWith("LGPD_")
+        ? "bg-[#efe8ff] text-[#7828c8]"
+        : cat === "mensagens"
+          ? "bg-[#e8f6ee] text-[#1f8a4c]"
+          : cat === "agendamentos"
+            ? "bg-[#efe8ff] text-[#7828c8]"
+            : "bg-[#fff3e0] text-[#c27803]";
   return (
     <span className={`mt-0.5 inline-flex size-9 shrink-0 items-center justify-center rounded-xl ${cores}`}>
       <Icon className="size-4" />

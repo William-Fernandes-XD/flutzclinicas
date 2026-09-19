@@ -264,7 +264,7 @@ public class ClinicOpsService {
         );
     }
 
-    public List<ConsultaPet> consultarPets(String nome, String cpfBruto) {
+    public PaginaConsultaPets consultarPets(String nome, String cpfBruto, Integer page, Integer size) {
         AuthPrincipal auth = AuthHolder.current();
         String nomeFiltro = nome == null ? "" : nome.trim();
         String cpf = digits(cpfBruto);
@@ -276,12 +276,74 @@ public class ClinicOpsService {
         if (!auth.tutor() && !auth.adminPlataforma() && !(auth.colaborador() && auth.temPapel("administrador"))) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Somente o administrador consulta pets");
         }
-        if (!auth.tutor() && !temNome && !temCpf) {
-            return List.of();
+
+        boolean clinicaListaPadrao = !auth.tutor() && !temNome && !temCpf;
+        int pagina = page == null || page < 0 ? 0 : page;
+        int tamanho = size == null || size < 1 ? (clinicaListaPadrao ? 10 : 100) : Math.min(size, 100);
+
+        StringBuilder fromWhere = new StringBuilder(
+                """
+                FROM flutz.pet p
+                JOIN flutz.pet_especie es ON es.pet_especie_id = p.pet_especie_id
+                LEFT JOIN flutz.pet_raca r ON r.pet_raca_id = p.pet_raca_id
+                JOIN flutz.cliente c ON c.cliente_id = p.cliente_id
+                WHERE 1=1
+                """
+        );
+        List<Object> args = new ArrayList<>();
+        if (auth.tutor()) {
+            fromWhere.append(" AND p.cliente_id = ?");
+            args.add(auth.atorId());
+        } else if (!(auth.adminPlataforma() && auth.empresaId() == null)) {
+            if (temCpf) {
+                fromWhere.append(" AND regexp_replace(c.cpf, '\\D', '', 'g') = ?");
+                args.add(cpf);
+            } else {
+                Integer empresaId = clinic.empresaAtual().getId();
+                if (clinicaListaPadrao) {
+                    fromWhere.append(
+                            """
+                             AND (
+                               EXISTS (SELECT 1 FROM flutz.agendamento g WHERE g.empresa_id = ? AND g.pet_id = p.pet_id)
+                               OR EXISTS (SELECT 1 FROM flutz.atendimento a WHERE a.empresa_id = ? AND a.pet_id = p.pet_id)
+                             )
+                            """
+                    );
+                    args.add(empresaId);
+                    args.add(empresaId);
+                } else {
+                    fromWhere.append(
+                            """
+                             AND (
+                               EXISTS (SELECT 1 FROM flutz.agendamento g WHERE g.empresa_id = ? AND g.pet_id = p.pet_id)
+                               OR EXISTS (SELECT 1 FROM flutz.atendimento a WHERE a.empresa_id = ? AND a.pet_id = p.pet_id)
+                               OR EXISTS (SELECT 1 FROM flutz.empresa_cliente ec WHERE ec.empresa_id = ? AND ec.cliente_id = p.cliente_id)
+                             )
+                            """
+                    );
+                    args.add(empresaId);
+                    args.add(empresaId);
+                    args.add(empresaId);
+                }
+            }
+        }
+        if (temNome) {
+            fromWhere.append(" AND LOWER(p.nome_pet) LIKE ?");
+            args.add("%" + nomeFiltro.toLowerCase(Locale.ROOT) + "%");
+        }
+        if (temCpf && (auth.tutor() || (auth.adminPlataforma() && auth.empresaId() == null))) {
+            fromWhere.append(" AND regexp_replace(c.cpf, '\\D', '', 'g') = ?");
+            args.add(cpf);
         }
 
-        StringBuilder sql = new StringBuilder(
-                """
+        Long total = jdbc.queryForObject(
+                "SELECT COUNT(*) " + fromWhere,
+                Long.class,
+                args.toArray()
+        );
+        long count = total == null ? 0 : total;
+
+        String select = """
                 SELECT p.pet_id, p.nome_pet, p.foto_url, p.sexo, p.data_aniversario,
                        es.descricao AS especie, r.descricao AS raca,
                        c.nome_cliente, c.email,
@@ -297,48 +359,14 @@ public class ClinicOpsService {
                          ) THEN 'ATRASADA'
                          ELSE 'EM_DIA'
                        END AS vacinas_status
-                FROM flutz.pet p
-                JOIN flutz.pet_especie es ON es.pet_especie_id = p.pet_especie_id
-                LEFT JOIN flutz.pet_raca r ON r.pet_raca_id = p.pet_raca_id
-                JOIN flutz.cliente c ON c.cliente_id = p.cliente_id
-                WHERE 1=1
-                """
-        );
-        List<Object> args = new ArrayList<>();
-        if (auth.tutor()) {
-            sql.append(" AND p.cliente_id = ?");
-            args.add(auth.atorId());
-        } else if (!(auth.adminPlataforma() && auth.empresaId() == null)) {
-            if (temCpf) {
-                sql.append(" AND regexp_replace(c.cpf, '\\D', '', 'g') = ?");
-                args.add(cpf);
-            } else {
-                Integer empresaId = clinic.empresaAtual().getId();
-                sql.append(
-                        """
-                         AND (
-                           EXISTS (SELECT 1 FROM flutz.agendamento g WHERE g.empresa_id = ? AND g.pet_id = p.pet_id)
-                           OR EXISTS (SELECT 1 FROM flutz.atendimento a WHERE a.empresa_id = ? AND a.pet_id = p.pet_id)
-                           OR EXISTS (SELECT 1 FROM flutz.empresa_cliente ec WHERE ec.empresa_id = ? AND ec.cliente_id = p.cliente_id)
-                         )
-                        """
-                );
-                args.add(empresaId);
-                args.add(empresaId);
-                args.add(empresaId);
-            }
-        }
-        if (temNome) {
-            sql.append(" AND LOWER(p.nome_pet) LIKE ?");
-            args.add("%" + nomeFiltro.toLowerCase(Locale.ROOT) + "%");
-        }
-        if (temCpf && (auth.tutor() || (auth.adminPlataforma() && auth.empresaId() == null))) {
-            sql.append(" AND regexp_replace(c.cpf, '\\D', '', 'g') = ?");
-            args.add(cpf);
-        }
-        sql.append(" ORDER BY p.nome_pet");
-        return jdbc.query(
-                sql.toString(),
+                """;
+        String sql = select + fromWhere + " ORDER BY p.nome_pet LIMIT ? OFFSET ?";
+        List<Object> pageArgs = new ArrayList<>(args);
+        pageArgs.add(tamanho);
+        pageArgs.add(pagina * tamanho);
+
+        List<ConsultaPet> items = jdbc.query(
+                sql,
                 (rs, i) -> new ConsultaPet(
                         rs.getInt("pet_id"),
                         rs.getString("nome_pet"),
@@ -351,8 +379,10 @@ public class ClinicOpsService {
                         rs.getString("email"),
                         rs.getString("vacinas_status")
                 ),
-                args.toArray()
+                pageArgs.toArray()
         );
+        int totalPages = count == 0 ? 1 : (int) Math.ceil(count / (double) tamanho);
+        return new PaginaConsultaPets(items, pagina, tamanho, count, totalPages);
     }
 
     public PetDetalhe pet(Integer petId) {
@@ -1050,6 +1080,17 @@ public class ClinicOpsService {
         jdbc.update("DELETE FROM flutz.chat_finalizacao WHERE chat_id = ?", chatId);
         String tipo = auth.tutor() ? "CLIENTE" : "COLABORADOR";
         String remetenteNome = doisPrimeirosNomes(auth.nome());
+        String remetenteFoto = auth.tutor()
+                ? jdbc.query(
+                        "SELECT foto_url FROM flutz.cliente WHERE cliente_id = ?",
+                        rs -> rs.next() ? rs.getString("foto_url") : null,
+                        auth.atorId()
+                )
+                : jdbc.query(
+                        "SELECT imagem_url FROM flutz.colaborador WHERE colaborador_id = ?",
+                        rs -> rs.next() ? rs.getString("imagem_url") : null,
+                        auth.atorId()
+                );
         Mensagem mensagem = jdbc.queryForObject(
                 """
                 INSERT INTO flutz.chat_mensagem (chat_id, remetente_tipo, remetente_id, mensagem)
@@ -1060,6 +1101,7 @@ public class ClinicOpsService {
                         rs.getInt("chat_mensagem_id"),
                         rs.getString("remetente_tipo"),
                         remetenteNome,
+                        remetenteFoto,
                         rs.getString("mensagem"),
                         rs.getTimestamp("data_criacao").toInstant().toString()
                 ),
@@ -1126,7 +1168,12 @@ public class ClinicOpsService {
                          WHEN 'CLIENTE' THEN cl.nome_cliente
                          WHEN 'COLABORADOR' THEN co.nome_colaborador
                          ELSE NULL
-                       END AS remetente_nome
+                       END AS remetente_nome,
+                       CASE m.remetente_tipo
+                         WHEN 'CLIENTE' THEN cl.foto_url
+                         WHEN 'COLABORADOR' THEN co.imagem_url
+                         ELSE NULL
+                       END AS remetente_foto
                 FROM flutz.chat_mensagem m
                 LEFT JOIN flutz.cliente cl
                   ON m.remetente_tipo = 'CLIENTE' AND cl.cliente_id = m.remetente_id
@@ -1139,6 +1186,7 @@ public class ClinicOpsService {
                         rs.getInt("chat_mensagem_id"),
                         rs.getString("remetente_tipo"),
                         doisPrimeirosNomes(rs.getString("remetente_nome")),
+                        rs.getString("remetente_foto"),
                         rs.getString("mensagem"),
                         rs.getTimestamp("data_criacao").toInstant().toString()
                 ),
@@ -1464,6 +1512,15 @@ public class ClinicOpsService {
     ) {
     }
 
+    public record PaginaConsultaPets(
+            List<ConsultaPet> items,
+            int page,
+            int size,
+            long total,
+            int totalPages
+    ) {
+    }
+
     public record PetDetalhe(
             Integer id,
             String nome,
@@ -1570,7 +1627,14 @@ public class ClinicOpsService {
     public record ChatDetalhe(ChatResumo chat, List<Mensagem> mensagens) {
     }
 
-    public record Mensagem(Integer id, String remetente, String remetenteNome, String texto, String quando) {
+    public record Mensagem(
+            Integer id,
+            String remetente,
+            String remetenteNome,
+            String remetenteFoto,
+            String texto,
+            String quando
+    ) {
     }
 
     public record NovoChat(Integer clienteId, Integer petId, Integer motivoId) {

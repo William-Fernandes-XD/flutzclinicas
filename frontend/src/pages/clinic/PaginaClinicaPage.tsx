@@ -1,14 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  ArrowLeft,
   ChevronDown,
   ChevronUp,
   Eye,
   EyeOff,
+  ExternalLink,
   Layers,
   Monitor,
   Smartphone,
   Tablet,
-  ExternalLink,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { ClinicaPublicaView, editorToPublic } from "../../components/clinic/ClinicaPublicaView";
@@ -41,7 +42,6 @@ const LABELS: Record<string, string> = {
 const CAMPANHA_VAZIA = { titulo: "", texto: "", metaValor: "", dataInicio: "", dataFim: "" };
 
 type Viewport = "desktop" | "tablet" | "mobile";
-type LeftTab = "estrutura" | "blocos";
 
 const VIEWPORT_WIDTH: Record<Viewport, string> = {
   desktop: "100%",
@@ -49,16 +49,24 @@ const VIEWPORT_WIDTH: Record<Viewport, string> = {
   mobile: "390px",
 };
 
+function catalogInfo(tipo: string) {
+  const item = SECTION_CATALOG.find((entry) => entry.tipo === tipo);
+  return {
+    label: item?.label ?? LABELS[tipo] ?? tipo,
+    descricao: item?.descricao ?? "Editar conteúdo desta seção na página pública.",
+  };
+}
+
 export function PaginaClinicaPage() {
   const toast = useToast();
   const clinic = useClinicBrand();
   const queryClient = useQueryClient();
   const pagina = useQuery({ queryKey: ["pagina"], queryFn: api.pageConfig });
   const [atual, setAtual] = useState("HERO");
+  const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState<PageEditor | null>(null);
   const [campanha, setCampanha] = useState(CAMPANHA_VAZIA);
   const [viewport, setViewport] = useState<Viewport>("desktop");
-  const [leftTab, setLeftTab] = useState<LeftTab>("estrutura");
   const [propsOpen, setPropsOpen] = useState(true);
   const previewRef = useRef<HTMLDivElement>(null);
 
@@ -144,8 +152,7 @@ export function PaginaClinicaPage() {
     visibilidade.isPending ||
     arquivo.isPending;
 
-  const blocosDisponiveis = useMemo(() => SECTION_CATALOG.filter((item) => item.categoria === "blocos"), []);
-  const estruturaPlanejada = useMemo(() => SECTION_CATALOG.filter((item) => item.categoria === "estrutura"), []);
+  const blocosDisponiveis = useMemo(() => SECTION_CATALOG.filter((item) => item.categoria === "blocos" && item.disponivel), []);
 
   if (pagina.isError && !draft) {
     return (
@@ -194,8 +201,13 @@ export function PaginaClinicaPage() {
 
   const abrirSecao = (tipo: string) => {
     setAtual(tipo);
+    setEditing(tipo);
     setPropsOpen(true);
     requestAnimationFrame(() => scrollPreview(tipo));
+  };
+
+  const voltarHud = () => {
+    setEditing(null);
   };
 
   const mover = (index: number, dir: number) => {
@@ -230,7 +242,6 @@ export function PaginaClinicaPage() {
       alternar(secao);
     }
     abrirSecao(tipo);
-    setLeftTab("estrutura");
   };
 
   const onPick = (destino: "logo" | "hero" | "galeria", file: File, previewUrl: string) => {
@@ -347,28 +358,36 @@ export function PaginaClinicaPage() {
           <p className="text-[11px] font-semibold tracking-[0.16em] text-brand uppercase">Page builder</p>
           <h1 className="truncate text-lg font-semibold text-ink">Página pública · {page.identidade.nome}</h1>
         </div>
-        <div className="flex items-center gap-1 rounded-lg border border-line bg-[#faf8fc] p-1">
-          {(
-            [
-              ["desktop", Monitor],
-              ["tablet", Tablet],
-              ["mobile", Smartphone],
-            ] as const
-          ).map(([id, Icon]) => (
-            <button
-              key={id}
-              type="button"
-              title={id}
-              onClick={() => setViewport(id)}
-              className={`inline-flex size-8 items-center justify-center rounded-md ${
-                viewport === id ? "bg-brand text-white" : "text-muted hover:bg-white hover:text-ink"
-              }`}
-            >
-              <Icon className="size-4" />
-            </button>
-          ))}
-        </div>
-        <p className="text-xs text-muted">{saving ? "Salvando…" : "Salve cada bloco no painel direito"}</p>
+        {editing ? (
+          <Button type="button" variant="secondary" className="!rounded-lg !px-3 !py-2 text-xs" onClick={voltarHud}>
+            <ArrowLeft className="size-3.5" />
+            Voltar
+          </Button>
+        ) : null}
+        {editing ? (
+          <div className="flex items-center gap-1 rounded-lg border border-line bg-[#faf8fc] p-1">
+            {(
+              [
+                ["desktop", Monitor],
+                ["tablet", Tablet],
+                ["mobile", Smartphone],
+              ] as const
+            ).map(([id, Icon]) => (
+              <button
+                key={id}
+                type="button"
+                title={id}
+                onClick={() => setViewport(id)}
+                className={`inline-flex size-8 items-center justify-center rounded-md ${
+                  viewport === id ? "bg-brand text-white" : "text-muted hover:bg-white hover:text-ink"
+                }`}
+              >
+                <Icon className="size-4" />
+              </button>
+            ))}
+          </div>
+        ) : null}
+        <p className="text-xs text-muted">{saving ? "Salvando…" : editing ? "Salve o bloco no painel direito" : "Escolha uma seção para editar"}</p>
         {page.identidade.slug ? (
           <Button href={`/clinica/${page.identidade.slug}`} target="_blank" rel="noreferrer" variant="secondary" className="!rounded-lg !px-3 !py-2 text-xs">
             <ExternalLink className="size-3.5" />
@@ -377,182 +396,151 @@ export function PaginaClinicaPage() {
         ) : null}
       </header>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[240px_minmax(0,1fr)_minmax(280px,340px)]">
-        <aside className="flex min-h-0 flex-col border-b border-[#ebe4f4] bg-white lg:border-r lg:border-b-0">
-          <div className="flex border-b border-line">
-            <button
-              type="button"
-              className={`flex-1 px-3 py-2.5 text-xs font-semibold ${leftTab === "estrutura" ? "border-b-2 border-brand text-brand" : "text-muted"}`}
-              onClick={() => setLeftTab("estrutura")}
-            >
-              Estrutura
-            </button>
-            <button
-              type="button"
-              className={`flex-1 px-3 py-2.5 text-xs font-semibold ${leftTab === "blocos" ? "border-b-2 border-brand text-brand" : "text-muted"}`}
-              onClick={() => setLeftTab("blocos")}
-            >
-              Blocos
-            </button>
-          </div>
-          <div className="min-h-0 flex-1 overflow-y-auto p-3">
-            {leftTab === "estrutura" ? (
-              <ul className="space-y-1">
-                {page.secoes.map((secao, index) => {
-                  const active = atual === secao.tipo;
-                  return (
-                    <li key={secao.tipo}>
-                      <div
-                        className={`group flex items-center gap-1 rounded-lg border px-2 py-1.5 transition ${
-                          active ? "border-brand/40 bg-brand-soft" : "border-transparent hover:border-line hover:bg-[#faf8fc]"
-                        }`}
-                      >
-                        <button type="button" className="min-w-0 flex-1 text-left" onClick={() => abrirSecao(secao.tipo)}>
-                          <p className="truncate text-sm font-medium text-ink">{LABELS[secao.tipo] ?? secao.tipo}</p>
-                          <p className="text-[10px] text-muted">{secao.visivel ? "Visível na página" : "Oculta"}</p>
-                        </button>
+      {!editing ? (
+        <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
+          <div className="mx-auto max-w-5xl">
+            <div className="mb-6">
+              <h2 className="text-xl font-semibold text-ink">Seções da página</h2>
+              <p className="mt-1 text-sm text-muted">Toque em um bloco para editar o preview e as propriedades.</p>
+            </div>
+            <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {page.secoes.map((secao, index) => {
+                const info = catalogInfo(secao.tipo);
+                return (
+                  <li key={secao.tipo}>
+                    <div className="group flex h-full flex-col rounded-2xl border border-[#ebe4f4] bg-white p-5 shadow-[0_12px_40px_-28px_rgba(80,40,140,0.35)] transition hover:border-brand/35 hover:shadow-[0_16px_44px_-24px_rgba(120,40,200,0.4)]">
+                      <button type="button" className="min-w-0 flex-1 text-left" onClick={() => abrirSecao(secao.tipo)}>
+                        <span className="inline-flex size-10 items-center justify-center rounded-xl bg-brand-soft text-brand">
+                          <Layers className="size-5" />
+                        </span>
+                        <p className="mt-4 text-lg font-semibold text-ink">{info.label}</p>
+                        <p className="mt-1.5 text-sm leading-snug text-muted">{info.descricao}</p>
+                        <p className="mt-3 text-xs font-medium text-brand">{secao.visivel ? "Visível na página" : "Oculta"}</p>
+                      </button>
+                      <div className="mt-4 flex items-center gap-1 border-t border-[#f0ebf6] pt-3">
                         <button
                           type="button"
-                          className="rounded p-1 text-muted opacity-70 hover:bg-white hover:opacity-100 disabled:opacity-30"
+                          className="rounded-lg p-2 text-muted hover:bg-[#faf8fc] hover:text-ink disabled:opacity-30"
                           disabled={layout.isPending || index === 0}
                           onClick={() => mover(index, -1)}
                           aria-label="Subir"
                         >
-                          <ChevronUp className="size-3.5" />
+                          <ChevronUp className="size-4" />
                         </button>
                         <button
                           type="button"
-                          className="rounded p-1 text-muted opacity-70 hover:bg-white hover:opacity-100 disabled:opacity-30"
+                          className="rounded-lg p-2 text-muted hover:bg-[#faf8fc] hover:text-ink disabled:opacity-30"
                           disabled={layout.isPending || index === page.secoes.length - 1}
                           onClick={() => mover(index, 1)}
                           aria-label="Descer"
                         >
-                          <ChevronDown className="size-3.5" />
+                          <ChevronDown className="size-4" />
                         </button>
                         <button
                           type="button"
-                          className="rounded p-1 text-muted opacity-70 hover:bg-white hover:opacity-100 disabled:opacity-30"
+                          className="rounded-lg p-2 text-muted hover:bg-[#faf8fc] hover:text-ink disabled:opacity-30"
                           disabled={layout.isPending}
                           onClick={() => alternar(secao)}
                           aria-label={secao.visivel ? "Ocultar" : "Exibir"}
                           title={secao.visivel ? "Ocultar" : "Exibir"}
                         >
-                          {secao.visivel ? <Eye className="size-3.5" /> : <EyeOff className="size-3.5" />}
+                          {secao.visivel ? <Eye className="size-4" /> : <EyeOff className="size-4" />}
                         </button>
+                        <Button type="button" className="ml-auto !rounded-lg !px-3 !py-1.5 text-xs" onClick={() => abrirSecao(secao.tipo)}>
+                          Editar
+                        </Button>
                       </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            ) : (
-              <div className="space-y-4">
-                <div>
-                  <p className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold tracking-wide text-muted uppercase">
-                    <Layers className="size-3.5" />
-                    Blocos prontos
-                  </p>
-                  <ul className="space-y-1.5">
-                    {blocosDisponiveis.map((item) => (
-                      <li key={item.tipo}>
-                        <button
-                          type="button"
-                          onClick={() => adicionarBloco(item.tipo, item.disponivel)}
-                          className={`w-full rounded-lg border px-3 py-2.5 text-left transition ${
-                            item.disponivel
-                              ? "border-line bg-white hover:border-brand/40 hover:bg-brand-soft/40"
-                              : "border-dashed border-line bg-[#faf8fc] opacity-70"
-                          }`}
-                        >
-                          <p className="text-sm font-medium text-ink">{item.label}</p>
-                          <p className="mt-0.5 text-[11px] leading-snug text-muted">
-                            {item.disponivel ? item.descricao : `${item.descricao} · em breve`}
-                          </p>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-                <div>
-                  <p className="mb-2 text-[11px] font-semibold tracking-wide text-muted uppercase">Estrutura</p>
-                  <ul className="space-y-1.5">
-                    {estruturaPlanejada.map((item) => (
-                      <li key={item.tipo}>
-                        <button
-                          type="button"
-                          onClick={() => adicionarBloco(item.tipo, item.disponivel)}
-                          className="w-full rounded-lg border border-dashed border-line bg-[#faf8fc] px-3 py-2.5 text-left opacity-70"
-                        >
-                          <p className="text-sm font-medium text-ink">{item.label}</p>
-                          <p className="mt-0.5 text-[11px] text-muted">{item.descricao} · em breve</p>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-            )}
-          </div>
-        </aside>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
 
-        <section className="flex min-h-0 min-w-0 flex-col bg-[#efeaf6]">
-          <div className="flex items-center justify-between gap-2 border-b border-[#ebe4f4] bg-white/80 px-4 py-2 text-xs text-muted backdrop-blur">
-            <span className="truncate">/clinica/{page.identidade.slug || "…"}</span>
-            <span className="hidden sm:inline">Selecione uma seção à esquerda · preview ao vivo</span>
+            {blocosDisponiveis.some((item) => !page.secoes.some((s) => s.tipo === item.tipo)) ? (
+              <div className="mt-8">
+                <p className="mb-3 text-[11px] font-semibold tracking-wide text-muted uppercase">Outros blocos</p>
+                <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  {blocosDisponiveis
+                    .filter((item) => !page.secoes.some((s) => s.tipo === item.tipo))
+                    .map((item) => (
+                      <li key={item.tipo}>
+                        <button
+                          type="button"
+                          onClick={() => adicionarBloco(item.tipo, item.disponivel)}
+                          className="w-full rounded-xl border border-dashed border-line bg-white/70 px-4 py-3 text-left hover:border-brand/40 hover:bg-brand-soft/30"
+                        >
+                          <p className="text-sm font-medium text-ink">{item.label}</p>
+                          <p className="mt-0.5 text-[11px] text-muted">{item.descricao}</p>
+                        </button>
+                      </li>
+                    ))}
+                </ul>
+              </div>
+            ) : null}
           </div>
-          <div ref={previewRef} className="min-h-0 flex-1 overflow-auto p-4 sm:p-6">
-            <div
-              className="mx-auto overflow-hidden rounded-xl border border-[#e4dcef] bg-white shadow-[0_12px_40px_-24px_rgba(80,40,140,0.35)] transition-[max-width] duration-200"
-              style={{ maxWidth: VIEWPORT_WIDTH[viewport] }}
-            >
-              <ClinicaPublicaView
-                data={editorToPublic({ ...previewDraft, hero: ensureHero(previewDraft) })}
-                preview
-                highlight={atual}
+        </div>
+      ) : (
+        <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(280px,340px)]">
+          <section className="flex min-h-0 min-w-0 flex-col bg-[#efeaf6]">
+            <div className="flex items-center justify-between gap-2 border-b border-[#ebe4f4] bg-white/80 px-4 py-2 text-xs text-muted backdrop-blur">
+              <span className="truncate">/clinica/{page.identidade.slug || "…"} · {catalogInfo(atual).label}</span>
+              <span className="hidden sm:inline">Preview ao vivo</span>
+            </div>
+            <div ref={previewRef} className="min-h-0 flex-1 overflow-auto p-4 sm:p-6" data-page-preview>
+              <div
+                className="mx-auto overflow-hidden rounded-xl border border-[#e4dcef] bg-white shadow-[0_12px_40px_-24px_rgba(80,40,140,0.35)] transition-[max-width] duration-200"
+                style={{ maxWidth: VIEWPORT_WIDTH[viewport] }}
+              >
+                <ClinicaPublicaView
+                  data={editorToPublic({ ...previewDraft, hero: ensureHero(previewDraft) })}
+                  preview
+                  highlight={atual}
+                />
+              </div>
+            </div>
+          </section>
+
+          <aside className="flex min-h-0 flex-col border-t border-[#ebe4f4] bg-white lg:border-t-0 lg:border-l">
+            <div className="flex items-center justify-between gap-2 border-b border-line px-3 py-2.5">
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold tracking-wide text-muted uppercase">Propriedades</p>
+                <p className="truncate text-sm font-semibold text-ink">{catalogInfo(atual).label}</p>
+              </div>
+              <button
+                type="button"
+                className="rounded-md px-2 py-1 text-xs font-medium text-muted hover:bg-[#faf8fc] lg:hidden"
+                onClick={() => setPropsOpen((v) => !v)}
+              >
+                {propsOpen ? "Recolher" : "Abrir"}
+              </button>
+            </div>
+            <div className={`min-h-0 flex-1 overflow-y-auto p-3 ${propsOpen ? "" : "hidden lg:block"}`}>
+              <EditorBlock
+                tipo={atual}
+                draft={page}
+                setDraft={setDraft}
+                campanha={campanha}
+                setCampanha={setCampanha}
+                onHero={onHero}
+                onSobre={onSobre}
+                onEndereco={onEndereco}
+                onContato={onContato}
+                onDoacao={onDoacao}
+                onPick={onPick}
+                onToggle={toggleItem}
+                pending={
+                  salvarHero.isPending ||
+                  salvarIdentidade.isPending ||
+                  salvarEndereco.isPending ||
+                  salvarContato.isPending ||
+                  doacao.isPending ||
+                  visibilidade.isPending
+                }
               />
             </div>
-          </div>
-        </section>
-
-        <aside className="flex min-h-0 flex-col border-t border-[#ebe4f4] bg-white lg:border-t-0 lg:border-l">
-          <div className="flex items-center justify-between gap-2 border-b border-line px-3 py-2.5">
-            <div className="min-w-0">
-              <p className="text-[11px] font-semibold tracking-wide text-muted uppercase">Propriedades</p>
-              <p className="truncate text-sm font-semibold text-ink">{LABELS[atual] ?? atual}</p>
-            </div>
-            <button
-              type="button"
-              className="rounded-md px-2 py-1 text-xs font-medium text-muted hover:bg-[#faf8fc] lg:hidden"
-              onClick={() => setPropsOpen((v) => !v)}
-            >
-              {propsOpen ? "Recolher" : "Abrir"}
-            </button>
-          </div>
-          <div className={`min-h-0 flex-1 overflow-y-auto p-3 ${propsOpen ? "" : "hidden lg:block"}`}>
-            <EditorBlock
-              tipo={atual}
-              draft={page}
-              setDraft={setDraft}
-              campanha={campanha}
-              setCampanha={setCampanha}
-              onHero={onHero}
-              onSobre={onSobre}
-              onEndereco={onEndereco}
-              onContato={onContato}
-              onDoacao={onDoacao}
-              onPick={onPick}
-              onToggle={toggleItem}
-              pending={
-                salvarHero.isPending ||
-                salvarIdentidade.isPending ||
-                salvarEndereco.isPending ||
-                salvarContato.isPending ||
-                doacao.isPending ||
-                visibilidade.isPending
-              }
-            />
-          </div>
-        </aside>
-      </div>
+          </aside>
+        </div>
+      )}
     </div>
   );
 }

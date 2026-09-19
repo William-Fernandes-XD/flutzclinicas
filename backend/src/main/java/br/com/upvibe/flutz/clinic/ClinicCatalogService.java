@@ -354,10 +354,20 @@ public class ClinicCatalogService {
                         "DELETE FROM flutz.pet_especie WHERE pet_especie_id = ? AND empresa_id = ?",
                         id, empresaId
                 );
-                case "racas" -> jdbc.update(
-                        "DELETE FROM flutz.pet_raca WHERE pet_raca_id = ? AND empresa_id = ?",
-                        id, empresaId
-                );
+                case "racas" -> {
+                    int n = jdbc.update(
+                            "DELETE FROM flutz.pet_raca WHERE pet_raca_id = ? AND empresa_id = ?",
+                            id, empresaId
+                    );
+                    if (n == 0) {
+                        // Admin da clínica pode remover raças da plataforma (ex.: SRD) do catálogo compartilhado.
+                        n = jdbc.update(
+                                "DELETE FROM flutz.pet_raca WHERE pet_raca_id = ? AND empresa_id IS NULL",
+                                id
+                        );
+                    }
+                    yield n;
+                }
                 case "vacinas" -> {
                     removerOfertaVacina(empresaId, id);
                     yield jdbc.update(

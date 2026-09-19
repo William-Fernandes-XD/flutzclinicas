@@ -15,7 +15,6 @@ export function AgendaExpedientePage() {
   const [erro, setErro] = useState("");
   const expediente = useQuery({ queryKey: ["agenda-expediente"], queryFn: api.agendaExpediente });
   const feriados = useQuery({ queryKey: ["agenda-feriados"], queryFn: api.agendaFeriados });
-  const bloqueios = useQuery({ queryKey: ["agenda-bloqueios"], queryFn: api.agendaBloqueios });
   const config = useQuery({ queryKey: ["agenda-config"], queryFn: api.agendaConfig });
   const [faixas, setFaixas] = useState<AgendaFaixa[] | null>(null);
   const visiveis = faixas ?? expediente.data ?? [];
@@ -35,7 +34,7 @@ export function AgendaExpedientePage() {
     },
   });
 
-  if (expediente.isLoading || feriados.isLoading || bloqueios.isLoading || config.isLoading) {
+  if (expediente.isLoading || feriados.isLoading || config.isLoading) {
     return <LoadingState />;
   }
 
@@ -79,7 +78,7 @@ export function AgendaExpedientePage() {
     <div className="space-y-8">
       <PageHeader
         title="Expediente da clínica"
-        description="Grade semanal, feriados, bloqueios e antecedência de cancelamento. A localização da clínica fica em Clínica → Localização."
+        description="Grade semanal, feriados e antecedência de cancelamento. A localização da clínica fica em Clínica → Localização."
       />
       {erro ? <ErrorState message={erro} /> : null}
 
@@ -163,7 +162,6 @@ export function AgendaExpedientePage() {
       </form>
 
       <FeriadosList />
-      <BloqueiosList />
     </div>
   );
 }
@@ -225,74 +223,6 @@ function FeriadosList() {
             <li key={item.id} className="flex items-center justify-between gap-3 py-2 text-sm">
               <span>
                 {item.data} · {item.nome} · {item.atende ? `atende ${item.inicio}–${item.fim}` : "fechado"}
-              </span>
-              <Button
-                variant="ghost"
-                busy={excluir.isPending}
-                busyLabel="Excluindo…"
-                onClick={() => item.id && excluir.mutate(item.id)}
-              >
-                Excluir
-              </Button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </Surface>
-  );
-}
-
-function BloqueiosList() {
-  const queryClient = useQueryClient();
-  const toast = useToast();
-  const lista = useQuery({ queryKey: ["agenda-bloqueios"], queryFn: api.agendaBloqueios });
-  const criar = useMutation({
-    mutationFn: api.criarBloqueio,
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["agenda-bloqueios"] });
-      toast.push("Bloqueio criado.");
-    },
-  });
-  const excluir = useMutation({
-    mutationFn: api.excluirBloqueio,
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["agenda-bloqueios"] });
-    },
-  });
-
-  async function onSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const data = new FormData(event.currentTarget);
-    await criar.mutateAsync({
-      inicio: new Date(String(data.get("inicio"))).toISOString(),
-      fim: new Date(String(data.get("fim"))).toISOString(),
-      motivo: String(data.get("motivo")),
-    });
-    event.currentTarget.reset();
-  }
-
-  return (
-    <Surface>
-      <h2 className="font-semibold">Bloqueios</h2>
-      <form onSubmit={(event) => void onSubmit(event)} className="mt-4 grid gap-2 sm:grid-cols-3">
-        <Input name="inicio" type="datetime-local" required />
-        <Input name="fim" type="datetime-local" required />
-        <Input name="motivo" placeholder="Motivo" required />
-        <Button type="submit" className="sm:col-span-3" busy={criar.isPending} busyLabel="Bloqueando…">
-          Bloquear período
-        </Button>
-      </form>
-      {!lista.data?.length ? (
-        <div className="mt-4">
-          <EmptyState title="Nenhum bloqueio" description="Reunião, manutenção ou folga pontual." />
-        </div>
-      ) : (
-        <ul className="mt-4 divide-y divide-line">
-          {lista.data.map((item) => (
-            <li key={item.id} className="flex items-center justify-between gap-3 py-2 text-sm">
-              <span>
-                {new Date(item.inicio).toLocaleString("pt-BR")} – {new Date(item.fim).toLocaleString("pt-BR")} ·{" "}
-                {item.motivo}
               </span>
               <Button
                 variant="ghost"

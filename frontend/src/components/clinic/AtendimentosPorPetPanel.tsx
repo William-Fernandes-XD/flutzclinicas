@@ -206,14 +206,14 @@ export function AtendimentosPorPetPanel({
             const kind = kindOf(ultimo);
             return (
               <li key={grupo.petId} className="rounded-3xl border border-[#ebe4f4] bg-white p-4 shadow-sm sm:p-5">
-                <div className="flex items-start gap-3">
+                <div className="grid grid-cols-[5.5rem_1fr] gap-x-3 gap-y-2 sm:grid-cols-[7rem_1fr]">
                   <PetPhoto
                     especie={grupo.especie}
                     seed={grupo.petId}
                     src={grupo.fotoUrl}
-                    className="size-16 shrink-0 rounded-2xl"
+                    className="row-span-2 size-full min-h-[5.5rem] rounded-2xl object-cover sm:min-h-[7rem]"
                   />
-                  <div className="min-w-0 flex-1">
+                  <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="text-lg font-semibold text-[#1f1630]">{grupo.pet}</p>
                       <Badge tone={tomKind(ultimo)}>{rotuloKind(ultimo)}</Badge>
@@ -222,7 +222,9 @@ export function AtendimentosPorPetPanel({
                       {clinicMode ? grupo.tutor : ultimo.clinica}
                       {grupo.especie ? ` · ${grupo.especie}` : ""}
                     </p>
-                    <p className="mt-3 text-[11px] font-bold tracking-wide text-[#7828c8] uppercase">
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-bold tracking-wide text-[#7828c8] uppercase">
                       Último atendimento
                     </p>
                     <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-[#6e6680] sm:text-sm">

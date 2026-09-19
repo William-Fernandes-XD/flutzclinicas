@@ -59,11 +59,13 @@ public class ClinicOpsController {
     }
 
     @GetMapping("/consulta/pets")
-    public List<ClinicOpsService.ConsultaPet> consultarPets(
+    public ClinicOpsService.PaginaConsultaPets consultarPets(
             @RequestParam(required = false) String nome,
-            @RequestParam(required = false) String cpf
+            @RequestParam(required = false) String cpf,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size
     ) {
-        return ops.consultarPets(nome, cpf);
+        return ops.consultarPets(nome, cpf, page, size);
     }
 
     @GetMapping("/pets/{id}")

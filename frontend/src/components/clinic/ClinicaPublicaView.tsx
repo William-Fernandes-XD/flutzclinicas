@@ -9,8 +9,9 @@ import {
   Share2,
   ShieldCheck,
   Stethoscope,
+  Syringe,
 } from "lucide-react";
-import type { MouseEvent, ReactNode } from "react";
+import { useState, type MouseEvent, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { WhatsAppIcon, toWhatsAppUrl } from "../icons/WhatsAppIcon";
 import { env } from "../../lib/env";
@@ -21,6 +22,7 @@ import type { PageItem, PublicClinic, PublicMembro } from "../../services/api";
 import { AgendarNaClinica } from "../agenda/AgendarNaClinica";
 import { Button } from "../ui/Button";
 import { EmptyState } from "../ui/EmptyState";
+import { Modal } from "../ui/Modal";
 import { GaleriaCarousel } from "./GaleriaCarousel";
 
 const PASTELS = [
@@ -91,6 +93,12 @@ function servicoTexto(item: PageItem): string {
   return "Cuidado veterinário com acompanhamento da equipe.";
 }
 
+function isServicoVacinacao(item: PageItem): boolean {
+  const icone = (item.icone ?? "").toLowerCase();
+  const nome = item.nome.toLowerCase();
+  return icone === "vacinacao" || nome.includes("vacin") || nome.includes("imuniz");
+}
+
 function asMembros(equipe: PublicClinic["equipe"]): PublicMembro[] {
   return (equipe ?? []).map((item) =>
     typeof item === "string" ? { nome: item, cargo: null, fotoUrl: null } : item,
@@ -141,12 +149,15 @@ export function ClinicaPublicaView({
   preview?: boolean;
   highlight?: string | null;
 }) {
+  const [vacinasOpen, setVacinasOpen] = useState(false);
   const clinica = data.clinica ?? { nome: "Clínica", slug: "", logoUrl: null, sobre: null, email: null, telefone: null };
   const hero = data.hero ? { ...data.hero, topicos: data.hero.topicos ?? [] } : null;
   const ordem = [...(data.secoes ?? [])]
     .filter((item) => preview || item.visivel)
     .sort((a, b) => a.ordem - b.ordem);
   const equipe = asMembros(data.equipe);
+  const servicosPublicos = (data.servicos ?? []).filter((item) => !isServicoVacinacao(item));
+  const vacinas = data.vacinas ?? [];
   const heroFoto = mediaUrl(hero?.imagemFundoUrl) || petArt.dog;
   const titulo = hero?.titulo?.trim() || "Cuidando do seu pet com todo o carinho que ele merece";
   const subtitulo =
@@ -292,13 +303,13 @@ export function ClinicaPublicaView({
                     Tudo o que seu pet precisa, com uma equipe preparada e estrutura completa.
                   </p>
                 </div>
-                {!data.servicos.length ? (
+                {!servicosPublicos.length && !vacinas.length ? (
                   <div className="mt-8">
                     <EmptyState title="Serviços em atualização" description="A clínica ainda não publicou a oferta." />
                   </div>
                 ) : (
                   <ul className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
-                    {data.servicos.map((item, index) => {
+                    {servicosPublicos.map((item, index) => {
                       return (
                         <li key={item.id} className="rounded-3xl bg-white px-5 py-6 text-center shadow-sm ring-1 ring-violet-100">
                           <span
@@ -312,6 +323,24 @@ export function ClinicaPublicaView({
                         </li>
                       );
                     })}
+                    {vacinas.length || preview ? (
+                      <li>
+                        <button
+                          type="button"
+                          onClick={() => setVacinasOpen(true)}
+                          className="flex h-full w-full flex-col items-center rounded-3xl bg-[#f6f0ff] px-5 py-6 text-center shadow-sm ring-1 ring-violet-200 transition hover:bg-brand-soft/60 hover:ring-brand/30"
+                        >
+                          <span className="mx-auto inline-flex size-14 items-center justify-center rounded-full bg-brand text-white">
+                            <Syringe className="size-6" />
+                          </span>
+                          <p className="mt-4 font-semibold text-ink">Vacinas disponíveis</p>
+                          <p className="mt-2 text-sm leading-relaxed text-muted">
+                            Visualizar vacinas disponíveis nesta clínica.
+                          </p>
+                          <span className="mt-3 text-sm font-semibold text-brand">Abrir lista</span>
+                        </button>
+                      </li>
+                    ) : null}
                   </ul>
                 )}
               </PageSection>
@@ -564,46 +593,44 @@ export function ClinicaPublicaView({
             </div>
           </div>
           <div className="flex items-center gap-3 text-brand">
-            {data.redes.length
-              ? data.redes.map((rede) => (
+            {data.redes.length ? (
+              data.redes.map((rede) => (
+                <a
+                  key={`${rede.tipoId}-${rede.url}`}
+                  href={rede.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex size-10 items-center justify-center rounded-full bg-white ring-1 ring-violet-100 hover:bg-brand-soft"
+                  aria-label={rede.nome}
+                >
+                  <SocialIcon nome={rede.nome} url={rede.url} />
+                </a>
+              ))
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className="inline-flex size-10 items-center justify-center rounded-full bg-white ring-1 ring-violet-100 hover:bg-brand-soft"
+                  aria-label="Compartilhar página"
+                  onClick={() => {
+                    void shareClinicPage(clinica.nome, clinica.slug);
+                  }}
+                >
+                  <Share2 className="size-4" />
+                </button>
+                {clinica.telefone ? (
                   <a
-                    key={`${rede.tipoId}-${rede.url}`}
-                    href={rede.url}
+                    href={toWhatsAppUrl(clinica.telefone)}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex size-10 items-center justify-center rounded-full bg-white ring-1 ring-violet-100 hover:bg-brand-soft"
-                    aria-label={rede.nome}
+                    className="inline-flex size-10 items-center justify-center rounded-full bg-white text-[#128C7E] ring-1 ring-violet-100 hover:bg-brand-soft"
+                    aria-label="WhatsApp"
                   >
-                    <SocialIcon nome={rede.nome} url={rede.url} />
+                    <WhatsAppIcon className="size-4" />
                   </a>
-                ))
-              : (
-                  <>
-                    <a
-                      href={env.instagramUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex size-10 items-center justify-center rounded-full bg-white ring-1 ring-violet-100 hover:bg-brand-soft"
-                      aria-label="Instagram"
-                    >
-                      <Camera className="size-4" />
-                    </a>
-                    <span className="inline-flex size-10 items-center justify-center rounded-full bg-white text-muted ring-1 ring-violet-100">
-                      <Share2 className="size-4" />
-                    </span>
-                    {clinica.telefone || env.contactWhatsapp ? (
-                      <a
-                        href={toWhatsAppUrl(clinica.telefone || env.contactWhatsapp)}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex size-10 items-center justify-center rounded-full bg-white text-[#128C7E] ring-1 ring-violet-100 hover:bg-brand-soft"
-                        aria-label="WhatsApp"
-                      >
-                        <WhatsAppIcon className="size-4" />
-                      </a>
-                    ) : null}
-                  </>
-                )}
+                ) : null}
+              </>
+            )}
           </div>
         </div>
         {!preview ? (
@@ -627,6 +654,30 @@ export function ClinicaPublicaView({
           <WhatsAppIcon className="size-7" />
         </a>
       ) : null}
+
+      <Modal open={vacinasOpen} title="Vacinas disponíveis" onClose={() => setVacinasOpen(false)}>
+        {!vacinas.length ? (
+          <p className="text-sm text-muted">
+            {preview
+              ? "As vacinas do catálogo da clínica aparecem aqui na página pública."
+              : "Esta clínica ainda não listou vacinas no catálogo."}
+          </p>
+        ) : (
+          <ul className="divide-y divide-violet-100">
+            {vacinas.map((item) => (
+              <li key={item.id} className="flex items-center gap-3 py-3">
+                <span className="inline-flex size-9 items-center justify-center rounded-xl bg-brand-soft text-brand">
+                  <Syringe className="size-4" />
+                </span>
+                <p className="text-sm font-medium text-ink">{item.nome}</p>
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className="mt-4 text-xs text-muted">
+          Para agendar, use o botão Agendar — a vacinação entra como serviço próprio quando disponível.
+        </p>
+      </Modal>
     </div>
   );
 }
@@ -637,6 +688,30 @@ function SocialIcon({ nome, url }: { nome: string; url: string }) {
   if (value.includes("face") || value.includes("fb.com")) return <Share2 className="size-4" />;
   if (value.includes("whats") || value.includes("wa.me")) return <WhatsAppIcon className="size-4" />;
   return <PawPrint className="size-4" />;
+}
+
+async function shareClinicPage(nome: string, slug: string) {
+  const url =
+    typeof window !== "undefined"
+      ? window.location.href.includes(`/clinica/${slug}`)
+        ? window.location.href
+        : `${window.location.origin}/clinica/${slug}`
+      : `/clinica/${slug}`;
+  try {
+    if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
+      await navigator.share({ title: nome, url });
+      return;
+    }
+  } catch {
+    /* usuário cancelou ou share indisponível — tenta clipboard */
+  }
+  try {
+    if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(url);
+    }
+  } catch {
+    /* ignore */
+  }
 }
 
 export function editorToPublic(editor: {
@@ -651,6 +726,7 @@ export function editorToPublic(editor: {
   galeria: PublicClinic["galeria"];
   redes: PublicClinic["redes"];
   doacoes: PublicClinic["doacoes"];
+  vacinas?: PublicClinic["vacinas"];
 }): PublicClinic {
   return {
     clinica: editor.identidade ?? { nome: "Clínica", slug: "", logoUrl: null, sobre: null, email: null, telefone: null },
@@ -668,7 +744,7 @@ export function editorToPublic(editor: {
     },
     secoes: editor.secoes ?? [],
     hero: editor.hero ? { ...editor.hero, topicos: editor.hero.topicos ?? [] } : null,
-    servicos: (editor.servicos ?? []).filter((item) => item.visivel),
+    servicos: (editor.servicos ?? []).filter((item) => item.visivel && !isServicoVacinacao(item)),
     equipe: (editor.equipe ?? [])
       .filter((item) => item.visivel && item.autorizado)
       .map((item) => ({ nome: item.nome, cargo: item.cargo ?? null, fotoUrl: item.fotoUrl ?? null })),
@@ -677,5 +753,6 @@ export function editorToPublic(editor: {
     galeria: (editor.galeria ?? []).filter((item) => item.visivel),
     redes: (editor.redes ?? []).filter((item) => item.tipoId && item.url.trim()),
     doacoes: (editor.doacoes ?? []).filter((item) => item.visivelPagina),
+    vacinas: editor.vacinas ?? [],
   };
 }

@@ -1,7 +1,7 @@
+import { Building2, Eye, EyeOff, Lock, Mail, UserRound } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, Navigate, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { BrandLogo } from "../components/BrandLogo";
-import { PageContainer } from "../components/layout/PageContainer";
 import { Button } from "../components/ui/Button";
 import { http, HttpError, waitMessage } from "../lib/http";
 import { safeNextPath } from "../lib/return-path";
@@ -16,6 +16,8 @@ export function LoginPage() {
   const { refresh, session, loading: sessionLoading } = useAuth();
   const [identificador, setIdentificador] = useState("");
   const [senha, setSenha] = useState("");
+  const [mostrarSenha, setMostrarSenha] = useState(false);
+  const [lembrar, setLembrar] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState(
     typeof location.state === "object" && location.state && "notice" in location.state
@@ -58,6 +60,9 @@ export function LoginPage() {
         json: { identificador, senha },
       });
       await refresh();
+      if (!lembrar) {
+        // sessão segue o cookie do backend; lembrar só afeta UX local
+      }
       navigate(nextPath ?? homeFor(next), { replace: true });
     } catch (err) {
       const httpErr = err instanceof HttpError ? err : null;
@@ -82,90 +87,197 @@ export function LoginPage() {
   const waiting = waitLeft > 0;
 
   return (
-    <PageContainer className="max-w-5xl py-10 sm:py-16">
-      <div className="grid overflow-hidden rounded-3xl border border-line bg-white shadow-[0_24px_60px_-32px_rgba(120,40,200,0.45)] lg:grid-cols-[minmax(0,1.05fr)_minmax(20rem,0.95fr)] dark:border-zinc-800 dark:bg-zinc-900">
-        <aside className="relative hidden min-h-[28rem] bg-[#2a1020] p-8 text-white lg:flex lg:flex-col lg:justify-between">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(232,121,249,0.35),transparent_45%),radial-gradient(circle_at_80%_80%,rgba(251,191,36,0.22),transparent_40%)]" />
-          <div className="relative">
-            <BrandLogo className="brightness-0 invert" />
-            <p className="mt-8 text-sm font-semibold tracking-[0.18em] text-amber-200 uppercase">Acesso</p>
-            <h1 className="mt-3 max-w-sm text-3xl font-bold tracking-tight">A clínica inteira em um só lugar.</h1>
-            <p className="mt-4 max-w-sm text-sm leading-relaxed text-white/80">
-              Colaboradores e a administração da plataforma entram com e-mail. Tutores entram com CPF.
-            </p>
-          </div>
-          <p className="relative text-xs text-white/55">Gestão veterinária Flutz · UpVibe</p>
-        </aside>
+    <div className="flex min-h-svh w-full bg-white">
+      {/* Painel esquerdo — branding */}
+      <aside className="relative hidden w-[42%] min-w-[22rem] overflow-hidden bg-[#f4eefb] lg:flex lg:flex-col">
+        <div
+          className="pointer-events-none absolute -top-24 -right-16 size-72 rounded-full bg-[#e8dff5]"
+          aria-hidden
+        />
+        <div
+          className="pointer-events-none absolute -bottom-28 -left-20 size-80 rounded-full bg-[#7828c8]/25"
+          aria-hidden
+        />
+        <div
+          className="pointer-events-none absolute top-1/3 right-10 size-16 rounded-full bg-[#dccff0]/70"
+          aria-hidden
+        />
+        <img
+          src="/login-bg.jpg"
+          alt=""
+          className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-[0.12] mix-blend-multiply"
+          aria-hidden
+        />
 
-        <div className="p-6 sm:p-8">
-          <h1 className="text-2xl font-bold text-ink lg:hidden dark:text-white">Entrar no Flutz</h1>
-          <p className="mt-1 text-sm text-muted lg:hidden">
-            Colaborador e administrador: e-mail e senha. Tutor: CPF e senha.
+        <div className="relative z-10 flex flex-1 flex-col px-10 pt-10 pb-0 xl:px-12">
+          <Link to="/" className="inline-flex w-fit">
+            <BrandLogo className="h-10 w-auto" />
+          </Link>
+
+          <h1 className="mt-10 max-w-md text-3xl font-bold tracking-tight text-[#3b1d6e] xl:text-4xl">
+            Mais saúde e bem-estar para seu pet.
+          </h1>
+          <p className="mt-4 max-w-sm text-sm leading-relaxed text-[#6e6680] xl:text-base">
+            Conectamos tutores e clínicas veterinárias em um só lugar, facilitando o cuidado que seu pet merece.
           </p>
-          <p className="hidden text-sm text-muted lg:block">Entre com os dados da sua conta.</p>
+
+          <div className="relative mt-auto flex flex-1 items-end justify-center pt-8">
+            <img
+              src="/login-pets.jpg"
+              alt="Cachorro e gato juntos"
+              className="max-h-[min(52vh,28rem)] w-auto max-w-full object-contain drop-shadow-[0_20px_40px_rgba(59,29,110,0.25)]"
+            />
+            <span
+              className="absolute top-[18%] right-[18%] text-3xl text-[#7828c8] drop-shadow-sm"
+              aria-hidden
+            >
+              ♥
+            </span>
+          </div>
+        </div>
+      </aside>
+
+      {/* Painel direito — formulário */}
+      <section className="relative flex min-h-svh flex-1 flex-col px-5 py-8 sm:px-10 lg:px-14 xl:px-20">
+        <div className="mb-6 flex items-center justify-between gap-3 lg:justify-end">
+          <Link to="/" className="lg:hidden">
+            <BrandLogo className="h-8 w-auto" />
+          </Link>
+          <p className="text-sm text-[#6e6680]">
+            Já tem uma conta?{" "}
+            <span className="font-semibold text-[#7828c8]">Fazer login</span>
+          </p>
+        </div>
+
+        <div className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center">
+          <h2 className="text-3xl font-bold tracking-tight text-[#3b1d6e]">Bem-vindo de volta!</h2>
+          <p className="mt-2 text-sm leading-relaxed text-[#6e6680]">
+            Entre na sua conta para continuar cuidando do que realmente importa.
+          </p>
 
           {waiting ? (
-            <p className="mt-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100">
+            <p className="mt-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
               {waitMessage(waitLeft)}
             </p>
           ) : null}
           {notice ? (
-            <p className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-100">
+            <p className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
               {notice}
             </p>
           ) : null}
 
-          <form onSubmit={onSubmit} className="mt-6 space-y-4">
-            <label className="block text-sm font-medium">
-              E-mail ou CPF
-              <input
-                required
-                value={identificador}
-                onChange={(event) => setIdentificador(event.target.value)}
-                className="mt-1 w-full rounded-xl border border-line px-3 py-2.5 dark:border-zinc-700 dark:bg-zinc-950"
-                autoComplete="username"
-              />
+          <form onSubmit={onSubmit} className="mt-8 space-y-4">
+            <label className="block text-sm font-medium text-[#3b1d6e]">
+              E-mail ou usuário
+              <span className="relative mt-1.5 block">
+                <Mail className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[#9a90b0]" />
+                <input
+                  required
+                  value={identificador}
+                  onChange={(event) => setIdentificador(event.target.value)}
+                  placeholder="seu@email.com"
+                  className="h-12 w-full rounded-xl border border-[#e4dcf0] bg-white pr-3 pl-10 text-sm text-[#1f1630] outline-none transition placeholder:text-[#b0a8c0] focus:border-[#7828c8]/50 focus:ring-2 focus:ring-[#7828c8]/15"
+                  autoComplete="username"
+                />
+              </span>
             </label>
-            <label className="block text-sm font-medium">
+
+            <label className="block text-sm font-medium text-[#3b1d6e]">
               Senha
-              <input
-                required
-                type="password"
-                value={senha}
-                onChange={(event) => setSenha(event.target.value)}
-                className="mt-1 w-full rounded-xl border border-line px-3 py-2.5 dark:border-zinc-700 dark:bg-zinc-950"
-                autoComplete="current-password"
-              />
+              <span className="relative mt-1.5 block">
+                <Lock className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[#9a90b0]" />
+                <input
+                  required
+                  type={mostrarSenha ? "text" : "password"}
+                  value={senha}
+                  onChange={(event) => setSenha(event.target.value)}
+                  placeholder="Digite sua senha"
+                  className="h-12 w-full rounded-xl border border-[#e4dcf0] bg-white pr-11 pl-10 text-sm text-[#1f1630] outline-none transition placeholder:text-[#b0a8c0] focus:border-[#7828c8]/50 focus:ring-2 focus:ring-[#7828c8]/15"
+                  autoComplete="current-password"
+                />
+                <button
+                  type="button"
+                  className="absolute top-1/2 right-3 -translate-y-1/2 text-[#9a90b0] hover:text-[#7828c8]"
+                  onClick={() => setMostrarSenha((v) => !v)}
+                  aria-label={mostrarSenha ? "Ocultar senha" : "Mostrar senha"}
+                >
+                  {mostrarSenha ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                </button>
+              </span>
             </label>
-            <div className="flex items-center justify-between gap-3">
-              <Link to="/recuperar-senha" className="text-sm font-medium text-brand hover:underline">
+
+            <div className="flex items-center justify-between gap-3 pt-1">
+              <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-[#5c4d78]">
+                <input
+                  type="checkbox"
+                  checked={lembrar}
+                  onChange={(event) => setLembrar(event.target.checked)}
+                  className="size-4 rounded border-[#d8cce8] text-[#7828c8] focus:ring-[#7828c8]/30"
+                />
+                Lembrar de mim
+              </label>
+              <Link to="/recuperar-senha" className="text-sm font-semibold text-[#7828c8] hover:underline">
                 Esqueci minha senha
               </Link>
             </div>
+
             {error ? <p className="text-sm text-danger">{error}</p> : null}
+
             <Button
               type="submit"
-              className="w-full"
+              className="h-12 w-full !rounded-xl text-base"
               busy={loading || waiting}
               busyLabel={loading ? "Entrando…" : "Aguarde…"}
             >
-              Entrar
+              Entrar →
             </Button>
           </form>
 
-          <p className="mt-6 text-sm text-muted">
-            Tutor novo?{" "}
-            <Link to="/cadastro?tipo=tutor" className="font-medium text-brand hover:underline">
-              Criar conta
+          <div className="my-8 flex items-center gap-3">
+            <span className="h-px flex-1 bg-[#ebe4f4]" />
+            <span className="text-xs font-medium tracking-wide text-[#9a90b0] uppercase">ou</span>
+            <span className="h-px flex-1 bg-[#ebe4f4]" />
+          </div>
+
+          <p className="mb-3 text-sm font-medium text-[#3b1d6e]">Não tem uma conta?</p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Link
+              to="/cadastro?tipo=clinica&plano=flutz"
+              className="group flex items-start gap-3 rounded-2xl bg-[#f4eefb] p-4 transition hover:bg-[#ebe0fa]"
+            >
+              <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-xl bg-white text-[#7828c8] shadow-sm">
+                <Building2 className="size-5" />
+              </span>
+              <span className="min-w-0">
+                <span className="flex items-center gap-1 font-semibold text-[#3b1d6e]">
+                  Cadastrar clínica
+                  <span className="opacity-0 transition group-hover:opacity-100">→</span>
+                </span>
+                <span className="mt-0.5 block text-xs leading-snug text-[#6e6680]">
+                  Sou uma clínica veterinária e quero usar o Flutz.
+                </span>
+              </span>
             </Link>
-            {" · "}
-            Clínica nova?{" "}
-            <Link to="/cadastro?tipo=clinica" className="font-medium text-brand hover:underline">
-              Cadastrar empresa
+            <Link
+              to="/cadastro?tipo=tutor"
+              className="group flex items-start gap-3 rounded-2xl bg-[#f4eefb] p-4 transition hover:bg-[#ebe0fa]"
+            >
+              <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-xl bg-white text-[#7828c8] shadow-sm">
+                <UserRound className="size-5" />
+              </span>
+              <span className="min-w-0">
+                <span className="flex items-center gap-1 font-semibold text-[#3b1d6e]">
+                  Cadastrar tutor
+                  <span className="opacity-0 transition group-hover:opacity-100">→</span>
+                </span>
+                <span className="mt-0.5 block text-xs leading-snug text-[#6e6680]">
+                  Quero cuidar do meu pet e agendar na minha clínica.
+                </span>
+              </span>
             </Link>
-          </p>
+          </div>
         </div>
-      </div>
-    </PageContainer>
+      </section>
+    </div>
   );
 }

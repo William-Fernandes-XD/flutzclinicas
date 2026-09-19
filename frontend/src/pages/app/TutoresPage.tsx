@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Eye, Mail, Phone, RefreshCw, Search, UserMinus, Users } from "lucide-react";
+import { Eye, Mail, Phone, RefreshCw, Search, Users } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { PetPhoto } from "../../components/clinic/PanelHero";
@@ -116,9 +116,7 @@ export function TutoresPage() {
     const all = lista.data ?? [];
     const total = all.length;
     const novos = all.filter((t) => isNovo(t.vinculadoEm)).length;
-    const comVisita = all.filter((t) => Boolean(t.ultimoAtendimentoEm)).length;
-    const inativos = all.filter((t) => t.ativo === false).length;
-    return { total, novos, comVisita, inativos };
+    return { total, novos };
   }, [lista.data]);
 
   const pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
@@ -134,7 +132,7 @@ export function TutoresPage() {
         description="Tutores vinculados à sua clínica. Eles chegam pelo primeiro contato — pedido de agendamento, chat ou cadastro na página pública. Aqui você consulta e acompanha."
       />
 
-      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="mb-6 grid grid-cols-2 gap-3">
         <Kpi
           label="Total de clientes"
           value={kpis.total}
@@ -146,19 +144,6 @@ export function TutoresPage() {
           value={kpis.novos}
           hint="Vinculados nos últimos 30 dias"
           icon={<RefreshCw className="size-4" />}
-        />
-        <Kpi
-          label="Já atenderam"
-          value={kpis.comVisita}
-          hint="Com pelo menos um agendamento"
-          icon={<Users className="size-4" />}
-        />
-        <Kpi
-          label="Inativos"
-          value={kpis.inativos}
-          hint="Vínculo desativado na clínica"
-          icon={<UserMinus className="size-4" />}
-          muted
         />
       </div>
 
@@ -395,7 +380,7 @@ export function TutoresPage() {
         </>
       )}
 
-      <Modal open={Boolean(detalhe)} title={detalhe?.nome ?? "Cliente"} onClose={() => setDetalhe(null)}>
+      <Modal open={Boolean(detalhe)} title={detalhe?.nome ?? "Cliente"} onClose={() => setDetalhe(null)} wide>
         {detalhe ? (
           <div className="grid gap-5">
             <div className="flex items-center gap-4">

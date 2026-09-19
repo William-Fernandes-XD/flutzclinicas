@@ -91,12 +91,14 @@ export const api = {
     return http<VisaoGeralReport>(`/api/clinica/relatorios/visao-geral${suffix}`);
   },
   pet: (id: number) => http<PetDetail>(`/api/pets/${id}`),
-  consultarPets: (params: { nome?: string; cpf?: string }) => {
+  consultarPets: (params: { nome?: string; cpf?: string; page?: number; size?: number }) => {
     const query = new URLSearchParams();
     if (params.nome?.trim()) query.set("nome", params.nome.trim());
     if (params.cpf?.replace(/\D/g, "")) query.set("cpf", params.cpf.replace(/\D/g, ""));
+    if (params.page != null) query.set("page", String(params.page));
+    if (params.size != null) query.set("size", String(params.size));
     const suffix = query.toString() ? `?${query}` : "";
-    return http<ConsultaPet[]>(`/api/consulta/pets${suffix}`);
+    return http<ConsultaPetsPage>(`/api/consulta/pets${suffix}`);
   },
   vaccinations: () => http<VaccinationRow[]>("/api/vacinacoes"),
   tutorVaccinations: () => http<VaccinationRow[]>("/api/tutor/vacinacoes"),
@@ -626,6 +628,14 @@ export type ConsultaPet = {
   vacinasStatus?: "EM_DIA" | "ATRASADA" | "SEM_REGISTRO" | string | null;
 };
 
+export type ConsultaPetsPage = {
+  items: ConsultaPet[];
+  page: number;
+  size: number;
+  total: number;
+  totalPages: number;
+};
+
 export type PetDetail = {
   id: number;
   nome: string;
@@ -731,6 +741,7 @@ export type PageEditor = {
   posicoes: CatalogItem[];
   tiposRede: CatalogItem[];
   permiteDoacoes: boolean;
+  vacinas?: { id: number; nome: string }[];
 };
 
 export type PageConfig = PageEditor;
@@ -777,7 +788,14 @@ export type TutorConversa = {
   ultimaAtividade: string | null;
 };
 
-export type ChatMessage = { id: number; remetente: string; remetenteNome?: string | null; texto: string; quando: string };
+export type ChatMessage = {
+  id: number;
+  remetente: string;
+  remetenteNome?: string | null;
+  remetenteFoto?: string | null;
+  texto: string;
+  quando: string;
+};
 export type ChatDetail = { chat: ChatSummary; mensagens: ChatMessage[] };
 
 export type AppNotification = {
@@ -944,4 +962,5 @@ export type PublicClinic = {
   galeria: PageGalleryItem[];
   redes: PageSocial[];
   doacoes: PageDonation[];
+  vacinas?: { id: number; nome: string }[];
 };

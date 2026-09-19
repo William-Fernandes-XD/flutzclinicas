@@ -277,8 +277,8 @@ export function AgendaPage() {
       ) : null}
 
       {view === "semana" ? (
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-7">
-          {days.map((day) => {
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {days.slice(0, 6).map((day) => {
             const dayList = activeItems
               .filter((item) => sameDay(item.when, day))
               .sort((a, b) => a.when.getTime() - b.when.getTime());
@@ -301,6 +301,44 @@ export function AgendaPage() {
               </Surface>
             );
           })}
+          <div className="grid grid-cols-1 gap-3 sm:col-span-2 sm:grid-cols-2">
+            {days[6] ? (
+              <Surface className="p-3">
+                <p className="text-xs font-semibold text-muted">
+                  {days[6].toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "2-digit" })}
+                </p>
+                {(() => {
+                  const dayList = activeItems
+                    .filter((item) => sameDay(item.when, days[6]))
+                    .sort((a, b) => a.when.getTime() - b.when.getTime());
+                  if (!dayList.length) return <p className="mt-3 text-xs text-muted">Livre</p>;
+                  return (
+                    <ul className="mt-3 space-y-2">
+                      {dayList.map((item) => (
+                        <li key={item.id}>
+                          <AppointmentBlock item={item} compact onClick={() => setSelected(item)} />
+                        </li>
+                      ))}
+                    </ul>
+                  );
+                })()}
+              </Surface>
+            ) : null}
+            <button
+              type="button"
+              onClick={() =>
+                setCursor((current) => {
+                  const next = new Date(current);
+                  next.setDate(current.getDate() + 7);
+                  return next;
+                })
+              }
+              className="flex min-h-[7rem] flex-col items-center justify-center rounded-3xl border border-dashed border-[#d8cce8] bg-[#faf8fc] p-4 text-center transition hover:border-[#7828c8]/50 hover:bg-[#f3eafc]"
+            >
+              <p className="text-sm font-semibold text-[#7828c8]">Próximo…</p>
+              <p className="mt-1 text-xs text-muted">Ver a semana seguinte</p>
+            </button>
+          </div>
         </div>
       ) : null}
 

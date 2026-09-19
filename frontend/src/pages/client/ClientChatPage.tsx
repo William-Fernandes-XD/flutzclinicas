@@ -277,9 +277,14 @@ export function ClientChatPage() {
                         }`}
                       >
                         {msg.remetenteNome ? (
-                          <p className={`mb-0.5 text-[11px] font-semibold ${minha ? "text-white/85" : "text-[#7828c8]"}`}>
-                            {msg.remetenteNome}
-                          </p>
+                          <div
+                            className={`mb-0.5 flex items-center gap-1.5 text-[11px] font-semibold ${
+                              minha ? "text-white/85" : "text-[#7828c8]"
+                            }`}
+                          >
+                            <Avatar name={msg.remetenteNome} src={msg.remetenteFoto} size="sm" />
+                            <span className="min-w-0 truncate">{msg.remetenteNome}</span>
+                          </div>
                         ) : null}
                         <p className="whitespace-pre-wrap break-words">{msg.texto}</p>
                         <p className={`mt-1 text-right text-[10px] ${minha ? "text-white/70" : "text-[#9a90b0]"}`}>

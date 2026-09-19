@@ -51,6 +51,7 @@ export function normalizePageEditor(raw: Partial<PageEditor> | null | undefined,
     posicoes: raw?.posicoes ?? [],
     tiposRede: raw?.tiposRede ?? [],
     permiteDoacoes: Boolean(raw?.permiteDoacoes),
+    vacinas: raw?.vacinas ?? [],
   };
 }
 

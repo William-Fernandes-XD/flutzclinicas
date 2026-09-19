@@ -407,6 +407,96 @@ public class NotificationService {
         }
     }
 
+    /** Avisa administradores da plataforma e confirma ao titular quando uma solicitação LGPD é criada. */
+    public void notificarLgpdCriada(
+            Integer solicitacaoId,
+            Integer empresaId,
+            String titularTipo,
+            Integer titularId,
+            String titularNome,
+            String tipoSolicitacao,
+            String status
+    ) {
+        if (solicitacaoId == null || titularId == null || titularTipo == null) {
+            return;
+        }
+        String tipoLabel = tipoSolicitacao == null ? "LGPD" : tipoSolicitacao.trim();
+        String quem = titularNome == null || titularNome.isBlank() ? "Titular" : titularNome.trim();
+        String chaveBase = "LGPD_SOLICITACAO:" + solicitacaoId;
+
+        for (Integer adminId : administradoresAtivos()) {
+            criarSePermitido(
+                    "ADMINISTRADOR_SISTEMA", adminId, empresaId, "LGPD_SOLICITACAO",
+                    "Nova solicitação LGPD",
+                    quem + " (" + titularTipo + ") abriu " + tipoLabel + " · status " + status + ".",
+                    "/admin/lgpd",
+                    "LGPD", solicitacaoId,
+                    chaveBase + ":ADMIN:" + adminId
+            );
+        }
+
+        String destTipo = "CLIENTE".equals(titularTipo) ? "CLIENTE" : "COLABORADOR";
+        String linkTitular = "CLIENTE".equals(titularTipo) ? "/cliente/meus-dados" : "/app/meus-dados";
+        criarSePermitido(
+                destTipo, titularId, empresaId, "LGPD_SOLICITACAO",
+                "Solicitação LGPD registrada",
+                "Recebemos sua solicitação de " + tipoLabel + ". Protocolo #" + solicitacaoId + ".",
+                linkTitular,
+                "LGPD", solicitacaoId,
+                chaveBase + ":TITULAR"
+        );
+    }
+
+    /** Avisa o titular quando o status da solicitação LGPD muda. */
+    public void notificarLgpdStatus(
+            Integer solicitacaoId,
+            Integer empresaId,
+            String titularTipo,
+            Integer titularId,
+            String tipoSolicitacao,
+            String status,
+            String motivoNegativa
+    ) {
+        if (solicitacaoId == null || titularId == null || titularTipo == null) {
+            return;
+        }
+        String destTipo = "CLIENTE".equals(titularTipo) ? "CLIENTE" : "COLABORADOR";
+        String linkTitular = "CLIENTE".equals(titularTipo) ? "/cliente/meus-dados" : "/app/meus-dados";
+        String tipoLabel = tipoSolicitacao == null ? "LGPD" : tipoSolicitacao.trim();
+        String statusLabel = status == null ? "atualizado" : status.trim();
+        String corpo = "Sua solicitação de " + tipoLabel + " (#" + solicitacaoId + ") agora está: " + statusLabel + ".";
+        if ("NEGADA".equalsIgnoreCase(statusLabel) && motivoNegativa != null && !motivoNegativa.isBlank()) {
+            corpo = corpo + " Motivo: " + motivoNegativa.trim();
+        }
+        criarSePermitido(
+                destTipo, titularId, empresaId, "LGPD_ATUALIZACAO",
+                "Atualização da solicitação LGPD",
+                corpo,
+                linkTitular,
+                "LGPD", solicitacaoId,
+                "LGPD_ATUALIZACAO:" + solicitacaoId + ":" + statusLabel
+        );
+    }
+
+    /** Contagem de não lidas para um destinatário (uso no stream SSE). */
+    public long contarNaoLidas(String destinatarioTipo, Integer destinatarioId) {
+        if (destinatarioTipo == null || destinatarioId == null) {
+            return 0;
+        }
+        Long n = jdbc.queryForObject(
+                """
+                SELECT COUNT(*) FROM flutz.notificacao
+                WHERE destinatario_tipo = ? AND destinatario_id = ? AND lida = FALSE
+                """,
+                Long.class, destinatarioTipo, destinatarioId
+        );
+        return n == null ? 0 : n;
+    }
+
+    public String destinatarioTipoPublico(AuthPrincipal auth) {
+        return destinatarioTipo(auth);
+    }
+
     @Transactional
     public int processarVacinasProximas() {
         LocalDate hoje = LocalDate.now(ZONA);

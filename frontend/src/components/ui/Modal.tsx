@@ -44,14 +44,14 @@ export function Modal({
           wide ? "max-h-[min(92svh,52rem)] w-full max-w-4xl" : "max-h-[min(92svh,40rem)] w-full max-w-lg"
         }`}
       >
-        <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-4 dark:border-zinc-800">
-          <h2 id="modal-title" className="text-lg font-semibold">
+        <div className="flex min-w-0 items-center justify-between gap-3 border-b border-line px-5 py-4 dark:border-zinc-800">
+          <h2 id="modal-title" className="min-w-0 truncate text-lg font-semibold">
             {title}
           </h2>
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex size-10 items-center justify-center rounded-xl hover:bg-brand-soft"
+            className="inline-flex size-10 shrink-0 items-center justify-center rounded-xl hover:bg-brand-soft"
             aria-label="Fechar"
           >
             <X className="size-4" />

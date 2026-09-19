@@ -250,9 +250,14 @@ export function ChatPage() {
                         }`}
                       >
                         {mensagem.remetenteNome ? (
-                          <p className={`mb-0.5 text-[11px] font-semibold ${minha ? "text-white/85" : "text-[#7828c8]"}`}>
-                            {mensagem.remetenteNome}
-                          </p>
+                          <div
+                            className={`mb-0.5 flex items-center gap-1.5 text-[11px] font-semibold ${
+                              minha ? "text-white/85" : "text-[#7828c8]"
+                            }`}
+                          >
+                            <Avatar name={mensagem.remetenteNome} src={mensagem.remetenteFoto} size="sm" />
+                            <span className="min-w-0 truncate">{mensagem.remetenteNome}</span>
+                          </div>
                         ) : null}
                         <p className="whitespace-pre-wrap break-words">{mensagem.texto}</p>
                         <p className={`mt-1 text-right text-[10px] ${minha ? "text-white/70" : "text-[#9a90b0]"}`}>

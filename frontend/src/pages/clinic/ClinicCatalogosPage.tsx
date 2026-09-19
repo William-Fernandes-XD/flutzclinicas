@@ -13,8 +13,6 @@ import {
   resolveSpeciesIconId,
   type SpeciesIconId,
 } from "../../lib/species-icons";
-import { ServiceTypeIcon, resolveServiceIconId, type ServiceIconId } from "../../lib/service-icons";
-import { ServiceIconPicker } from "../../components/clinic/ServiceIconPicker";
 import { useToast } from "../../providers/ToastProvider";
 
 const TIPOS = [
@@ -23,7 +21,6 @@ const TIPOS = [
   { id: "vacinas", label: "Vacinas" },
   { id: "doencas", label: "Doenças" },
   { id: "especialidades", label: "Especialidades" },
-  { id: "tipos-servico", label: "Tipos de serviço" },
 ] as const;
 
 type Item = {
@@ -38,7 +35,6 @@ export function ClinicCatalogosPage() {
   const [tipo, setTipo] = useState<(typeof TIPOS)[number]["id"]>("especies");
   const [nome, setNome] = useState("");
   const [icone, setIcone] = useState<SpeciesIconId>("cao");
-  const [iconeServico, setIconeServico] = useState<ServiceIconId>("consulta");
   const [especieId, setEspecieId] = useState<number | undefined>();
   const [editando, setEditando] = useState<Item | null>(null);
   const [error, setError] = useState("");
@@ -46,8 +42,8 @@ export function ClinicCatalogosPage() {
   const queryClient = useQueryClient();
 
   const especies = useQuery({
-    queryKey: ["catalogos", "especies"],
-    queryFn: () => http<Item[]>("/api/catalogos/especies"),
+    queryKey: ["clinica", "catalogos", "especies"],
+    queryFn: () => http<Item[]>("/api/clinica/catalogos/especies"),
   });
   const lista = useQuery({
     queryKey: ["clinica", "catalogos", tipo],
@@ -71,7 +67,6 @@ export function ClinicCatalogosPage() {
   useEffect(() => {
     setNome("");
     setIcone("cao");
-    setIconeServico("consulta");
     setEspecieId(undefined);
     setEditando(null);
     setError("");
@@ -80,12 +75,12 @@ export function ClinicCatalogosPage() {
   const invalidar = () => {
     queryClient.invalidateQueries({ queryKey: ["clinica", "catalogos", tipo] });
     queryClient.invalidateQueries({ queryKey: ["clinica", "catalogos", "racas"] });
+    queryClient.invalidateQueries({ queryKey: ["clinica", "catalogos", "especies"] });
     queryClient.invalidateQueries({ queryKey: ["catalogos"] });
     queryClient.invalidateQueries({ queryKey: ["especies"] });
     queryClient.invalidateQueries({ queryKey: ["racas"] });
     queryClient.invalidateQueries({ queryKey: ["vacinas"] });
     queryClient.invalidateQueries({ queryKey: ["agenda-vacinas"] });
-    queryClient.invalidateQueries({ queryKey: ["tipos-servico"] });
   };
 
   const criarItem = async (preset: CatalogPreset) => {
@@ -93,12 +88,6 @@ export function ClinicCatalogosPage() {
       return http<Item>(`/api/clinica/catalogos/${tipo}`, {
         method: "POST",
         json: { nome: preset.nome, icone: preset.icone ?? "outro" },
-      });
-    }
-    if (tipo === "tipos-servico") {
-      return http<Item>(`/api/clinica/catalogos/${tipo}`, {
-        method: "POST",
-        json: { nome: preset.nome, icone: preset.icone ?? "geral" },
       });
     }
     if (tipo === "racas") {
@@ -118,12 +107,7 @@ export function ClinicCatalogosPage() {
 
   const salvar = useMutation({
     mutationFn: async () => {
-      const body =
-        tipo === "especies"
-          ? { nome, especieId, icone }
-          : tipo === "tipos-servico"
-            ? { nome, icone: iconeServico }
-            : { nome, especieId };
+      const body = tipo === "especies" ? { nome, especieId, icone } : { nome, especieId };
       if (editando) {
         return http<Item>(`/api/clinica/catalogos/${tipo}/${editando.id}`, {
           method: "PUT",
@@ -138,7 +122,6 @@ export function ClinicCatalogosPage() {
     onSuccess: () => {
       setNome("");
       setIcone("cao");
-      setIconeServico("consulta");
       setEditando(null);
       setError("");
       toast.push(editando ? "Item atualizado." : "Item cadastrado para esta clínica.");
@@ -199,9 +182,6 @@ export function ClinicCatalogosPage() {
     if (tipo === "especies") {
       setIcone(resolveSpeciesIconId(item.icone, item.nome));
     }
-    if (tipo === "tipos-servico") {
-      setIconeServico(resolveServiceIconId(item.icone, item.nome));
-    }
     setError("");
   };
 
@@ -209,7 +189,6 @@ export function ClinicCatalogosPage() {
     setEditando(null);
     setNome("");
     setIcone("cao");
-    setIconeServico("consulta");
     setError("");
   };
 
@@ -343,8 +322,6 @@ export function ClinicCatalogosPage() {
               >
                 {tipo === "especies" && preset.icone ? (
                   <SpeciesIcon icone={preset.icone} className="size-4" />
-                ) : tipo === "tipos-servico" ? (
-                  <ServiceTypeIcon icone={preset.icone} nome={preset.nome} className="size-4" />
                 ) : (
                   <Plus className="size-3.5" />
                 )}
@@ -408,10 +385,6 @@ export function ClinicCatalogosPage() {
               })}
             </div>
           </div>
-        ) : null}
-
-        {tipo === "tipos-servico" ? (
-          <ServiceIconPicker value={iconeServico} onChange={setIconeServico} />
         ) : null}
 
         <div className="flex min-w-0 flex-col gap-3 sm:flex-row">
@@ -483,11 +456,6 @@ export function ClinicCatalogosPage() {
                         <SpeciesIcon icone={item.icone} nome={item.nome} className="size-5" />
                       </span>
                     ) : null}
-                    {tipo === "tipos-servico" ? (
-                      <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-[#f3eafc] text-[#7828c8]">
-                        <ServiceTypeIcon icone={item.icone} nome={item.nome} className="size-5" />
-                      </span>
-                    ) : null}
                     <div className="min-w-0">
                       <p className="truncate font-medium text-[#1f1630]">{item.nome}</p>
                       <p className="text-xs text-muted">
@@ -496,17 +464,19 @@ export function ClinicCatalogosPage() {
                       </p>
                     </div>
                   </div>
-                  {item.daClinica ? (
+                  {item.daClinica || tipo === "racas" ? (
                     <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        className="inline-flex items-center gap-1 rounded-xl border border-line bg-white px-3 py-1.5 text-sm font-semibold text-[#5c4d78] hover:bg-[#f7f1fc]"
-                        onClick={() => iniciarEdicao(item)}
-                      >
-                        <Pencil className="size-3.5" />
-                        Editar
-                      </button>
-                      {tipo === "especies" ? (
+                      {item.daClinica ? (
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 rounded-xl border border-line bg-white px-3 py-1.5 text-sm font-semibold text-[#5c4d78] hover:bg-[#f7f1fc]"
+                          onClick={() => iniciarEdicao(item)}
+                        >
+                          <Pencil className="size-3.5" />
+                          Editar
+                        </button>
+                      ) : null}
+                      {tipo === "especies" && item.daClinica ? (
                         <button
                           type="button"
                           className="inline-flex items-center gap-1 rounded-xl border border-line bg-white px-3 py-1.5 text-sm font-semibold text-[#5c4d78] hover:bg-[#f7f1fc] disabled:opacity-50"

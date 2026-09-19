@@ -418,6 +418,18 @@ public class ClinicPageService {
                 ),
                 empresaId
         );
+        List<Item> vacinas = jdbc.query(
+                """
+                SELECT ev.empresa_vacina_id, v.nome_vacina
+                FROM flutz.empresa_vacina ev
+                JOIN flutz.vacina v ON v.vacina_id = ev.vacina_id
+                JOIN flutz.status s ON s.status_id = ev.status_id
+                WHERE ev.empresa_id = ? AND LOWER(s.descricao) = 'ativo'
+                ORDER BY v.nome_vacina
+                """,
+                (rs, i) -> new Item(rs.getInt(1), rs.getString(2)),
+                empresaId
+        );
         List<ItemVisivel> especialidades = jdbc.query(
                 """
                 SELECT ee.empresa_especialidade_id, e.descricao, NULL, ee.visivel_pagina
@@ -522,7 +534,8 @@ public class ClinicPageService {
                 redes,
                 posicoes,
                 tiposRede,
-                permiteDoacoes(empresaId)
+                permiteDoacoes(empresaId),
+                vacinas
         );
     }
 
@@ -545,7 +558,10 @@ public class ClinicPageService {
                 editor.endereco(),
                 editor.secoes(),
                 editor.hero(),
-                editor.servicos().stream().filter(ItemVisivel::visivel).toList(),
+                editor.servicos().stream()
+                        .filter(ItemVisivel::visivel)
+                        .filter(item -> !isServicoVacinacao(item))
+                        .toList(),
                 editor.equipe().stream()
                         .filter(item -> item.visivel() && Boolean.TRUE.equals(item.autorizado()))
                         .map(item -> new MembroPublico(item.nome(), item.cargo(), item.fotoUrl()))
@@ -554,8 +570,18 @@ public class ClinicPageService {
                 editor.avaliacoes(),
                 editor.galeria(),
                 editor.redes(),
-                editor.doacoes()
+                editor.doacoes(),
+                editor.vacinas()
         );
+    }
+
+    /** Serviços puramente de vacinação ficam fora da grade pública — vão no card/modal de vacinas. */
+    private static boolean isServicoVacinacao(ItemVisivel item) {
+        String icone = item.icone() == null ? "" : item.icone().toLowerCase(Locale.ROOT);
+        String nome = item.nome() == null ? "" : item.nome().toLowerCase(Locale.ROOT);
+        return "vacinacao".equals(icone)
+                || nome.contains("vacin")
+                || nome.contains("imuniz");
     }
 
     private void garantirSecoes(Integer empresaId, boolean doacoes) {
@@ -714,7 +740,8 @@ public class ClinicPageService {
             List<Rede> redes,
             List<Item> posicoes,
             List<Item> tiposRede,
-            boolean permiteDoacoes
+            boolean permiteDoacoes,
+            List<Item> vacinas
     ) {
     }
 
@@ -729,7 +756,8 @@ public class ClinicPageService {
             List<Avaliacao> avaliacoes,
             List<GaleriaItem> galeria,
             List<Rede> redes,
-            List<Doacao> doacoes
+            List<Doacao> doacoes,
+            List<Item> vacinas
     ) {
     }
 }
