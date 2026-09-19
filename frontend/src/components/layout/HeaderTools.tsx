@@ -12,14 +12,18 @@ import {
   Syringe,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Link, useNavigate } from "react-router-dom";
 import { env } from "../../lib/env";
 import { http } from "../../lib/http";
 import { mediaUrl } from "../../lib/media";
+import { useToast } from "../../providers/ToastProvider";
 import { api, type AppNotification } from "../../services/api";
 import { Modal } from "../ui/Modal";
+
+const NOTIF_SOUND_SRC = "/notification_sound.mp3";
+const NOTIF_POLL_MS = 2_500;
 
 type Tutor = { id: number; nome: string };
 type Pet = { id: number; nome: string; especie: string; tutor: string };
@@ -45,11 +49,15 @@ function categoria(tipo: string): FiltroNotif {
 export function HeaderTools({ variant }: { variant: "platform" | "clinic" | "client" }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const toast = useToast();
   const [searchOpen, setSearchOpen] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
   const [filtro, setFiltro] = useState<FiltroNotif>("todas");
   const [q, setQ] = useState("");
   const enabled = variant === "clinic" && searchOpen;
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const prevNaoLidasRef = useRef<number | null>(null);
+  const lastSoundAtRef = useRef(0);
 
   const tutores = useQuery({ queryKey: ["tutores"], queryFn: () => http<Tutor[]>("/api/tutores"), enabled });
   const pets = useQuery({ queryKey: ["pets"], queryFn: () => http<Pet[]>("/api/pets"), enabled });
@@ -64,60 +72,86 @@ export function HeaderTools({ variant }: { variant: "platform" | "clinic" | "cli
     queryKey: ["notificacoes"],
     queryFn: api.notificacoes,
     enabled: notesEnabled,
-    refetchInterval: notesEnabled ? 60_000 : false,
+    refetchInterval: notesEnabled ? NOTIF_POLL_MS : false,
+    refetchIntervalInBackground: true,
+    staleTime: 0,
   });
   const naoLidas = useQuery({
     queryKey: ["notificacoes-nao-lidas"],
     queryFn: api.notificacoesNaoLidas,
     enabled: notesEnabled,
-    refetchInterval: notesEnabled ? 60_000 : false,
+    refetchInterval: notesEnabled ? NOTIF_POLL_MS : false,
+    refetchIntervalInBackground: true,
+    staleTime: 0,
   });
+
+  function playNotifSound() {
+    const now = Date.now();
+    if (now - lastSoundAtRef.current < 1200) return;
+    const som = audioRef.current;
+    if (!som) return;
+    lastSoundAtRef.current = now;
+    try {
+      som.currentTime = 0;
+      void som.play().catch(() => undefined);
+    } catch {
+      /* ignore autoplay blocks */
+    }
+  }
 
   useEffect(() => {
     if (!notesEnabled) return;
+    const som = new Audio(NOTIF_SOUND_SRC);
+    som.preload = "auto";
+    som.volume = 1;
+    audioRef.current = som;
+
+    function unlockAudio() {
+      void som
+        .play()
+        .then(() => {
+          som.pause();
+          som.currentTime = 0;
+        })
+        .catch(() => undefined);
+      window.removeEventListener("pointerdown", unlockAudio);
+      window.removeEventListener("keydown", unlockAudio);
+    }
+    window.addEventListener("pointerdown", unlockAudio);
+    window.addEventListener("keydown", unlockAudio);
+
     const url = `${env.apiUrl}/api/notificacoes/stream`;
     let source: EventSource | null = null;
     let closed = false;
-    let ultimoNaoLidas = -1;
-    const som = new Audio("/notification_sound.mp3");
-    som.preload = "auto";
-
-    function tocarSom() {
-      try {
-        som.currentTime = 0;
-        void som.play().catch(() => {
-          /* autoplay pode ser bloqueado até interação do usuário */
-        });
-      } catch {
-        /* ignore */
-      }
-    }
+    let retryTimer: number | undefined;
 
     function connect() {
       if (closed) return;
-      source = new EventSource(url, { withCredentials: true });
+      try {
+        source = new EventSource(url, { withCredentials: true });
+      } catch {
+        retryTimer = window.setTimeout(connect, 4000);
+        return;
+      }
       source.addEventListener("notificacoes", (event) => {
-        let total = -1;
-        try {
-          const payload = JSON.parse((event as MessageEvent).data) as { naoLidas?: number };
-          total = Number(payload.naoLidas);
-        } catch {
-          total = -1;
-        }
-        if (Number.isFinite(total) && total >= 0) {
-          if (ultimoNaoLidas >= 0 && total > ultimoNaoLidas) {
-            tocarSom();
-          }
-          ultimoNaoLidas = total;
-        }
         void queryClient.invalidateQueries({ queryKey: ["notificacoes"] });
         void queryClient.invalidateQueries({ queryKey: ["notificacoes-nao-lidas"] });
+        try {
+          const data = JSON.parse(String((event as MessageEvent).data ?? "{}")) as { naoLidas?: number };
+          const total = typeof data.naoLidas === "number" ? data.naoLidas : null;
+          const prev = prevNaoLidasRef.current;
+          if (total != null && prev != null && total > prev) {
+            playNotifSound();
+          }
+        } catch {
+          /* ignore malformed SSE payload */
+        }
       });
       source.onerror = () => {
         source?.close();
         source = null;
         if (!closed) {
-          window.setTimeout(connect, 5000);
+          retryTimer = window.setTimeout(connect, 4000);
         }
       };
     }
@@ -125,9 +159,31 @@ export function HeaderTools({ variant }: { variant: "platform" | "clinic" | "cli
     connect();
     return () => {
       closed = true;
+      if (retryTimer) window.clearTimeout(retryTimer);
       source?.close();
+      window.removeEventListener("pointerdown", unlockAudio);
+      window.removeEventListener("keydown", unlockAudio);
+      som.pause();
+      audioRef.current = null;
     };
   }, [notesEnabled, queryClient]);
+
+  // Polling: atualiza badge e toca o som quando a contagem sobe
+  const naoLidasTotal = naoLidas.data?.total ?? 0;
+  useEffect(() => {
+    if (!notesEnabled || naoLidas.isLoading || naoLidas.data == null) return;
+    const prev = prevNaoLidasRef.current;
+    if (prev == null) {
+      prevNaoLidasRef.current = naoLidasTotal;
+      return;
+    }
+    if (naoLidasTotal > prev) {
+      playNotifSound();
+      const delta = naoLidasTotal - prev;
+      toast.push(delta === 1 ? "Nova notificação" : `${delta} novas notificações`);
+    }
+    prevNaoLidasRef.current = naoLidasTotal;
+  }, [naoLidasTotal, naoLidas.isLoading, naoLidas.data, notesEnabled, toast]);
 
   const marcar = useMutation({
     mutationFn: (id: number) => api.marcarNotificacaoLida(id),

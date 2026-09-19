@@ -67,7 +67,8 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        VITE_API_URL: ${VITE_API_URL:-http://localhost:8080}
+        # URL relativa: o nginx do frontend faz proxy de /api → backend (SSE/cookies)
+        VITE_API_URL: ""
         VITE_SITE_URL: ${VITE_SITE_URL:-http://localhost:5173}
         VITE_APP_NAME: ${VITE_APP_NAME:-Flutz}
         VITE_COMPANY_NAME: ${VITE_COMPANY_NAME:-UpVibe}
@@ -76,6 +77,8 @@ services:
         VITE_PLANO_PROFISSIONAL: ${VITE_PLANO_PROFISSIONAL:-R$ 199,90/mês}
         VITE_PLANO_PREMIUM: ${VITE_PLANO_PREMIUM:-R$ 299,90/mês}
     profiles: ["frontend"]
+    depends_on:
+      - backend
     ports:
       - "5173:80"
 

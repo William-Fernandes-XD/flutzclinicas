@@ -60,9 +60,6 @@ export function LoginPage() {
         json: { identificador, senha },
       });
       await refresh();
-      if (!lembrar) {
-        // sessão segue o cookie do backend; lembrar só afeta UX local
-      }
       navigate(nextPath ?? homeFor(next), { replace: true });
     } catch (err) {
       const httpErr = err instanceof HttpError ? err : null;
@@ -87,72 +84,60 @@ export function LoginPage() {
   const waiting = waitLeft > 0;
 
   return (
-    <div className="flex min-h-svh w-full bg-white">
-      {/* Painel esquerdo — branding */}
-      <aside className="relative hidden w-[42%] min-w-[22rem] overflow-hidden bg-[#f4eefb] lg:flex lg:flex-col">
-        <div
-          className="pointer-events-none absolute -top-24 -right-16 size-72 rounded-full bg-[#e8dff5]"
-          aria-hidden
-        />
-        <div
-          className="pointer-events-none absolute -bottom-28 -left-20 size-80 rounded-full bg-[#7828c8]/25"
-          aria-hidden
-        />
-        <div
-          className="pointer-events-none absolute top-1/3 right-10 size-16 rounded-full bg-[#dccff0]/70"
-          aria-hidden
-        />
+    <div className="grid min-h-svh w-full bg-[#faf7fd] lg:grid-cols-2">
+      <aside className="relative hidden min-h-svh overflow-hidden lg:block">
         <img
-          src="/login-bg.jpg"
+          src="/login-bg.png"
           alt=""
-          className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-[0.12] mix-blend-multiply"
+          className="absolute inset-0 h-full w-full object-cover"
           aria-hidden
         />
+        <div className="absolute inset-0 bg-gradient-to-b from-[#2a1848]/55 via-[#3b1d6e]/25 to-[#1a0f2e]/70" />
 
-        <div className="relative z-10 flex flex-1 flex-col px-10 pt-10 pb-0 xl:px-12">
+        <div className="relative z-10 flex h-full flex-col px-10 pt-10 pb-0 xl:px-14">
           <Link to="/" className="inline-flex w-fit">
-            <BrandLogo className="h-10 w-auto" />
+            <BrandLogo className="h-11 w-auto brightness-0 invert" />
           </Link>
 
-          <h1 className="mt-10 max-w-md text-3xl font-bold tracking-tight text-[#3b1d6e] xl:text-4xl">
-            Mais saúde e bem-estar para seu pet.
-          </h1>
-          <p className="mt-4 max-w-sm text-sm leading-relaxed text-[#6e6680] xl:text-base">
-            Conectamos tutores e clínicas veterinárias em um só lugar, facilitando o cuidado que seu pet merece.
-          </p>
+          <div className="mt-12 max-w-lg">
+            <p className="text-5xl font-bold tracking-tight text-white xl:text-[3.25rem] xl:leading-[1.1]">
+              Flutz
+            </p>
+            <h1 className="mt-4 text-2xl font-semibold leading-snug text-white/95 xl:text-3xl">
+              Mais saúde e bem-estar para seu pet.
+            </h1>
+            <p className="mt-4 max-w-md text-base leading-relaxed text-white/80">
+              Tutores e clínicas no mesmo lugar — agenda, chat e cuidado do dia a dia.
+            </p>
+          </div>
 
-          <div className="relative mt-auto flex flex-1 items-end justify-center pt-8">
+          <div className="relative mt-auto flex flex-1 items-end justify-center">
             <img
-              src="/login-pets.jpg"
-              alt="Cachorro e gato juntos"
-              className="max-h-[min(52vh,28rem)] w-auto max-w-full object-contain drop-shadow-[0_20px_40px_rgba(59,29,110,0.25)]"
+              src="/login-pets.png"
+              alt="Cachorro e gato"
+              className="max-h-[min(62vh,36rem)] w-auto max-w-[min(100%,28rem)] object-contain drop-shadow-[0_28px_60px_rgba(0,0,0,0.45)]"
             />
-            <span
-              className="absolute top-[18%] right-[18%] text-3xl text-[#7828c8] drop-shadow-sm"
-              aria-hidden
-            >
-              ♥
-            </span>
           </div>
         </div>
       </aside>
 
-      {/* Painel direito — formulário */}
-      <section className="relative flex min-h-svh flex-1 flex-col px-5 py-8 sm:px-10 lg:px-14 xl:px-20">
-        <div className="mb-6 flex items-center justify-between gap-3 lg:justify-end">
+      <section className="relative flex min-h-svh flex-col px-5 py-8 sm:px-10 lg:px-14 xl:px-20">
+        <div className="mb-8 flex items-center justify-between gap-3">
           <Link to="/" className="lg:hidden">
-            <BrandLogo className="h-8 w-auto" />
+            <BrandLogo className="h-9 w-auto" />
           </Link>
-          <p className="text-sm text-[#6e6680]">
-            Já tem uma conta?{" "}
-            <span className="font-semibold text-[#7828c8]">Fazer login</span>
+          <p className="ml-auto text-sm text-[#6e6680]">
+            Novo por aqui?{" "}
+            <Link to="/cadastro?tipo=tutor" className="font-semibold text-[#7828c8] hover:underline">
+              Criar conta
+            </Link>
           </p>
         </div>
 
-        <div className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center">
-          <h2 className="text-3xl font-bold tracking-tight text-[#3b1d6e]">Bem-vindo de volta!</h2>
+        <div className="mx-auto flex w-full max-w-[26rem] flex-1 flex-col justify-center">
+          <h2 className="text-3xl font-bold tracking-tight text-[#2a1848]">Bem-vindo de volta</h2>
           <p className="mt-2 text-sm leading-relaxed text-[#6e6680]">
-            Entre na sua conta para continuar cuidando do que realmente importa.
+            Entre com e-mail ou CPF para continuar.
           </p>
 
           {waiting ? (
@@ -167,25 +152,25 @@ export function LoginPage() {
           ) : null}
 
           <form onSubmit={onSubmit} className="mt-8 space-y-4">
-            <label className="block text-sm font-medium text-[#3b1d6e]">
-              E-mail ou usuário
+            <label className="block text-sm font-medium text-[#2a1848]">
+              E-mail ou CPF
               <span className="relative mt-1.5 block">
-                <Mail className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[#9a90b0]" />
+                <Mail className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-[#9a90b0]" />
                 <input
                   required
                   value={identificador}
                   onChange={(event) => setIdentificador(event.target.value)}
-                  placeholder="seu@email.com"
+                  placeholder="seu@email.com ou CPF"
                   className="h-12 w-full rounded-xl border border-[#e4dcf0] bg-white pr-3 pl-10 text-sm text-[#1f1630] outline-none transition placeholder:text-[#b0a8c0] focus:border-[#7828c8]/50 focus:ring-2 focus:ring-[#7828c8]/15"
                   autoComplete="username"
                 />
               </span>
             </label>
 
-            <label className="block text-sm font-medium text-[#3b1d6e]">
+            <label className="block text-sm font-medium text-[#2a1848]">
               Senha
               <span className="relative mt-1.5 block">
-                <Lock className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[#9a90b0]" />
+                <Lock className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-[#9a90b0]" />
                 <input
                   required
                   type={mostrarSenha ? "text" : "password"}
@@ -239,20 +224,17 @@ export function LoginPage() {
             <span className="h-px flex-1 bg-[#ebe4f4]" />
           </div>
 
-          <p className="mb-3 text-sm font-medium text-[#3b1d6e]">Não tem uma conta?</p>
+          <p className="mb-3 text-sm font-medium text-[#2a1848]">Não tem uma conta?</p>
           <div className="grid gap-3 sm:grid-cols-2">
             <Link
               to="/cadastro?tipo=clinica&plano=flutz"
-              className="group flex items-start gap-3 rounded-2xl bg-[#f4eefb] p-4 transition hover:bg-[#ebe0fa]"
+              className="group flex items-start gap-3 rounded-2xl border border-[#ebe4f4] bg-white p-4 transition hover:border-[#d4c4ef] hover:bg-[#faf7fd]"
             >
-              <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-xl bg-white text-[#7828c8] shadow-sm">
+              <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#f3eafc] text-[#7828c8]">
                 <Building2 className="size-5" />
               </span>
               <span className="min-w-0">
-                <span className="flex items-center gap-1 font-semibold text-[#3b1d6e]">
-                  Cadastrar clínica
-                  <span className="opacity-0 transition group-hover:opacity-100">→</span>
-                </span>
+                <span className="font-semibold text-[#2a1848]">Cadastrar clínica</span>
                 <span className="mt-0.5 block text-xs leading-snug text-[#6e6680]">
                   Sou uma clínica veterinária e quero usar o Flutz.
                 </span>
@@ -260,16 +242,13 @@ export function LoginPage() {
             </Link>
             <Link
               to="/cadastro?tipo=tutor"
-              className="group flex items-start gap-3 rounded-2xl bg-[#f4eefb] p-4 transition hover:bg-[#ebe0fa]"
+              className="group flex items-start gap-3 rounded-2xl border border-[#ebe4f4] bg-white p-4 transition hover:border-[#d4c4ef] hover:bg-[#faf7fd]"
             >
-              <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-xl bg-white text-[#7828c8] shadow-sm">
+              <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#f3eafc] text-[#7828c8]">
                 <UserRound className="size-5" />
               </span>
               <span className="min-w-0">
-                <span className="flex items-center gap-1 font-semibold text-[#3b1d6e]">
-                  Cadastrar tutor
-                  <span className="opacity-0 transition group-hover:opacity-100">→</span>
-                </span>
+                <span className="font-semibold text-[#2a1848]">Cadastrar tutor</span>
                 <span className="mt-0.5 block text-xs leading-snug text-[#6e6680]">
                   Quero cuidar do meu pet e agendar na minha clínica.
                 </span>

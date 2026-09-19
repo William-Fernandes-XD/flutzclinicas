@@ -53,7 +53,7 @@ public class NotificationController {
     @GetMapping(path = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter stream() {
         AuthPrincipal auth = AuthHolder.current();
-        if (!auth.tutor() && !auth.colaborador() && !auth.adminPlataforma()) {
+        if (auth == null || (!auth.tutor() && !auth.colaborador() && !auth.adminPlataforma())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Sem permissão");
         }
         Integer destId = auth.atorId();
