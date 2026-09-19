@@ -1,13 +1,12 @@
-import { useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import ExcelJS from "exceljs";
-import { jsPDF } from "jspdf";
 import { Button } from "../../components/ui/Button";
 import { ErrorState, LoadingState } from "../../components/ui/EmptyState";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { Tabs } from "../../components/ui/Tabs";
-import { HttpError } from "../../lib/http";
 import { statusAgenda } from "../../lib/agenda";
+import { exportExcel, exportPdf } from "../../lib/export";
+import { HttpError } from "../../lib/http";
 import { api, type VisaoGeralReport } from "../../services/api";
 import { ReportBarChart, ReportLineChart, ReportPieChart, type ReportPoint } from "../../components/reports/ReportCharts";
 
@@ -70,7 +69,6 @@ export function RelatoriosPage() {
   const [customDe, setCustomDe] = useState("");
   const [customAte, setCustomAte] = useState("");
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
-  const reportRef = useRef<HTMLDivElement>(null);
 
   const range = useMemo(() => rangeForPreset(preset, customDe, customAte), [preset, customDe, customAte]);
 
@@ -97,7 +95,7 @@ export function RelatoriosPage() {
               <Button type="button" variant="secondary" onClick={() => exportVisaoExcel(visao.data!)}>
                 Exportar Excel
               </Button>
-              <Button type="button" variant="secondary" onClick={() => exportVisaoPdf(visao.data!, reportRef.current)}>
+              <Button type="button" variant="secondary" onClick={() => exportVisaoPdf(visao.data!)}>
                 Exportar PDF
               </Button>
             </div>
@@ -131,7 +129,6 @@ export function RelatoriosPage() {
           statusFilter={statusFilter}
           setStatusFilter={setStatusFilter}
           query={visao}
-          reportRef={reportRef}
         />
       ) : (
         <ComingSoon
@@ -173,7 +170,6 @@ function VisaoGeralSection({
   statusFilter,
   setStatusFilter,
   query,
-  reportRef,
 }: {
   preset: Preset;
   setPreset: (p: Preset) => void;
@@ -184,7 +180,6 @@ function VisaoGeralSection({
   statusFilter: string | null;
   setStatusFilter: (v: string | null) => void;
   query: { isLoading: boolean; isError: boolean; error: unknown; data?: VisaoGeralReport };
-  reportRef: RefObject<HTMLDivElement | null>;
 }) {
   if (query.isLoading) return <LoadingState label="Calculando indicadores da clínica…" />;
   if (query.isError) {
@@ -197,7 +192,7 @@ function VisaoGeralSection({
   const deltas = data.deltas;
 
   return (
-    <div ref={reportRef} className="space-y-6">
+    <div className="space-y-6">
       <PeriodChips
         preset={preset}
         setPreset={setPreset}
@@ -399,103 +394,52 @@ function MiniStat({ label, value, hint }: { label: string; value: number; hint: 
   );
 }
 
-async function exportVisaoExcel(data: VisaoGeralReport) {
-  const wb = new ExcelJS.Workbook();
-  wb.creator = "Flutz";
-  const resumo = wb.addWorksheet("Resumo");
-  resumo.addRow(["Clínica", data.clinica]);
-  resumo.addRow(["Período", `${data.periodoDe} a ${data.periodoAte}`]);
-  resumo.addRow(["Gerado em", new Date().toLocaleString("pt-BR")]);
-  resumo.addRow([]);
-  resumo.addRow(["KPI", "Valor", "Δ % vs anterior"]);
-  const rows: [string, string | number, number][] = [
-    ["Faturamento", Number(data.kpis.faturamento), Number(data.deltas.faturamento)],
-    ["Atendimentos", data.kpis.atendimentos, Number(data.deltas.atendimentos)],
-    ["Ticket médio", Number(data.kpis.ticketMedio), Number(data.deltas.ticketMedio)],
-    ["Novos tutores", data.kpis.novosTutores, Number(data.deltas.novosTutores)],
-    ["Novos pets", data.kpis.novosPets, Number(data.deltas.novosPets)],
-    ["Cancelamentos", data.kpis.cancelamentos, Number(data.deltas.cancelamentos)],
-    ["Faltas", data.kpis.faltas, Number(data.deltas.faltas)],
-    ["Retornos", data.kpis.retornos, Number(data.deltas.retornos)],
-    ["Ocupação %", Number(data.kpis.ocupacaoPercentual), 0],
-  ];
-  rows.forEach((r) => resumo.addRow(r));
-
-  const addSerie = (name: string, serie: { rotulo: string; valor: number | string }[], mapStatus = false) => {
-    const ws = wb.addWorksheet(name.slice(0, 31));
-    ws.addRow(["Rótulo", "Valor"]);
-    serie.forEach((p) => ws.addRow([mapStatus ? statusAgenda(String(p.rotulo)) : p.rotulo, Number(p.valor)]));
-  };
-  addSerie("Faturamento", data.faturamentoSerie);
-  addSerie("Atendimentos", data.atendimentosSerie);
-  addSerie("Por status", data.porStatus, true);
-  addSerie("Servicos volume", data.servicosVolume);
-  addSerie("Servicos receita", data.servicosReceita);
-
-  const buf = await wb.xlsx.writeBuffer();
-  const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `visao-geral-${data.periodoDe}_${data.periodoAte}.xlsx`;
-  a.click();
-  URL.revokeObjectURL(url);
+function exportVisaoExcel(data: VisaoGeralReport) {
+  exportExcel({
+    filename: `visao-geral-${data.periodoDe}_${data.periodoAte}`,
+    title: "Visão geral",
+    columns: [
+      { header: "KPI", value: (r) => r.kpi },
+      { header: "Valor", value: (r) => r.valor },
+      { header: "Δ % vs anterior", value: (r) => r.delta },
+    ],
+    rows: [
+      { kpi: "Faturamento", valor: money(data.kpis.faturamento), delta: pct(data.deltas.faturamento) },
+      { kpi: "Atendimentos", valor: data.kpis.atendimentos, delta: pct(data.deltas.atendimentos) },
+      { kpi: "Ticket médio", valor: money(data.kpis.ticketMedio), delta: pct(data.deltas.ticketMedio) },
+      { kpi: "Novos tutores", valor: data.kpis.novosTutores, delta: pct(data.deltas.novosTutores) },
+      { kpi: "Novos pets", valor: data.kpis.novosPets, delta: pct(data.deltas.novosPets) },
+      { kpi: "Cancelamentos", valor: data.kpis.cancelamentos, delta: pct(data.deltas.cancelamentos) },
+      { kpi: "Faltas", valor: data.kpis.faltas, delta: pct(data.deltas.faltas) },
+      { kpi: "Retornos", valor: data.kpis.retornos, delta: pct(data.deltas.retornos) },
+      { kpi: "Ocupação %", valor: data.kpis.ocupacaoPercentual, delta: "—" },
+      ...data.porStatus.map((p) => ({
+        kpi: `Status: ${statusAgenda(String(p.rotulo))}`,
+        valor: Number(p.valor),
+        delta: "—",
+      })),
+    ],
+  });
 }
 
-async function exportVisaoPdf(data: VisaoGeralReport, root: HTMLElement | null) {
-  const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
-  const margin = 40;
-  let y = margin;
-  doc.setFontSize(16);
-  doc.text(data.clinica, margin, y);
-  y += 22;
-  doc.setFontSize(12);
-  doc.text("Relatório — Visão geral da clínica", margin, y);
-  y += 18;
-  doc.setFontSize(10);
-  doc.setTextColor(100);
-  doc.text(`Período: ${data.periodoDe} a ${data.periodoAte}`, margin, y);
-  y += 14;
-  doc.text(`Gerado em: ${new Date().toLocaleString("pt-BR")}`, margin, y);
-  y += 24;
-  doc.setTextColor(0);
-  doc.setFontSize(11);
-  doc.text("KPIs", margin, y);
-  y += 16;
-  doc.setFontSize(10);
-  const lines = [
-    `Faturamento: ${money(data.kpis.faturamento)} (${pct(data.deltas.faturamento)})`,
-    `Atendimentos: ${data.kpis.atendimentos} (${pct(data.deltas.atendimentos)})`,
-    `Ticket médio: ${money(data.kpis.ticketMedio)}`,
-    `Novos tutores: ${data.kpis.novosTutores} · Novos pets: ${data.kpis.novosPets}`,
-    `Cancelamentos: ${data.kpis.cancelamentos} · Retornos: ${data.kpis.retornos}`,
-    `Ocupação aproximada: ${data.kpis.ocupacaoPercentual}%`,
-  ];
-  lines.forEach((line) => {
-    doc.text(line, margin, y);
-    y += 14;
+function exportVisaoPdf(data: VisaoGeralReport) {
+  exportPdf({
+    filename: `visao-geral-${data.periodoDe}_${data.periodoAte}`,
+    title: `${data.clinica} — Visão geral`,
+    columns: [
+      { header: "Indicador", value: (r) => r.label },
+      { header: "Valor", value: (r) => r.value },
+    ],
+    rows: [
+      { label: "Período", value: `${data.periodoDe} a ${data.periodoAte}` },
+      { label: "Faturamento", value: `${money(data.kpis.faturamento)} (${pct(data.deltas.faturamento)})` },
+      { label: "Atendimentos", value: `${data.kpis.atendimentos} (${pct(data.deltas.atendimentos)})` },
+      { label: "Ticket médio", value: money(data.kpis.ticketMedio) },
+      { label: "Novos tutores", value: data.kpis.novosTutores },
+      { label: "Novos pets", value: data.kpis.novosPets },
+      { label: "Cancelamentos", value: data.kpis.cancelamentos },
+      { label: "Retornos", value: data.kpis.retornos },
+      { label: "Ocupação", value: `${data.kpis.ocupacaoPercentual}%` },
+    ],
   });
-
-  // Captura gráficos da tela (canvas do ECharts)
-  if (root) {
-    const canvases = root.querySelectorAll("canvas");
-    for (const canvas of Array.from(canvases).slice(0, 4)) {
-      if (y > 700) {
-        doc.addPage();
-        y = margin;
-      }
-      try {
-        const img = (canvas as HTMLCanvasElement).toDataURL("image/png", 1);
-        const w = 515;
-        const h = Math.min(180, (canvas.height / canvas.width) * w);
-        y += 10;
-        doc.addImage(img, "PNG", margin, y, w, h);
-        y += h + 16;
-      } catch {
-        /* ignore */
-      }
-    }
-  }
-
-  doc.save(`visao-geral-${data.periodoDe}_${data.periodoAte}.pdf`);
 }
