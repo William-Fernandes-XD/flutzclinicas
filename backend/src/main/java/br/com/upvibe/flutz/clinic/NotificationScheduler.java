@@ -23,34 +23,50 @@ public class NotificationScheduler {
     /** Vacinas: todo dia às 23:59 (horário de Brasília) — D-3 e D-1. */
     @Scheduled(cron = "0 59 23 * * *", zone = "America/Sao_Paulo")
     public void vacinasDiarias() {
-        int n = notifications.processarVacinasProximas();
-        log.info("Notificações de vacina geradas: {}", n);
+        try {
+            int n = notifications.processarVacinasProximas();
+            log.info("Notificações de vacina geradas: {}", n);
+        } catch (Exception ex) {
+            log.error("Falha ao processar notificações de vacina", ex);
+        }
     }
 
     /** Assinatura D-3: todo dia às 08:00 (horário de Brasília). */
     @Scheduled(cron = "0 0 8 * * *", zone = "America/Sao_Paulo")
     public void assinaturaD3Diaria() {
-        int n = notifications.processarAssinaturaD3();
-        if (n > 0) {
-            log.info("Notificações de assinatura D-3 geradas: {}", n);
+        try {
+            int n = notifications.processarAssinaturaD3();
+            if (n > 0) {
+                log.info("Notificações de assinatura D-3 geradas: {}", n);
+            }
+        } catch (Exception ex) {
+            log.error("Falha ao processar notificações de assinatura D-3", ex);
         }
     }
 
     /** Bloqueio por inadimplência: todo dia às 01:00 (horário de Brasília). */
     @Scheduled(cron = "0 0 1 * * *", zone = "America/Sao_Paulo")
     public void inadimplenciaDiaria() {
-        int n = billing.processarInadimplencia();
-        if (n > 0) {
-            log.info("Assinaturas bloqueadas por inadimplência: {}", n);
+        try {
+            int n = billing.processarInadimplencia();
+            if (n > 0) {
+                log.info("Assinaturas bloqueadas por inadimplência: {}", n);
+            }
+        } catch (Exception ex) {
+            log.error("Falha ao processar inadimplência", ex);
         }
     }
 
     /** Lembretes D-1 (amanhã) e H-1 do veterinário. */
     @Scheduled(cron = "0 */10 * * * *", zone = "America/Sao_Paulo")
     public void lembretesAtendimento() {
-        int n = notifications.processarLembretesAtendimento();
-        if (n > 0) {
-            log.info("Lembretes de atendimento gerados: {}", n);
+        try {
+            int n = notifications.processarLembretesAtendimento();
+            if (n > 0) {
+                log.info("Lembretes de atendimento gerados: {}", n);
+            }
+        } catch (Exception ex) {
+            log.error("Falha ao processar lembretes de atendimento", ex);
         }
     }
 }

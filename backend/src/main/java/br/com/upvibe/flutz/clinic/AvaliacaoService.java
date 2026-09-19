@@ -54,30 +54,33 @@ public class AvaliacaoService {
         }
         List<Pendente> itens = jdbc.query(
                 """
-                SELECT a.atendimento_id AS origem_id, 'ATENDIMENTO' AS origem, e.empresa_id, e.nome_empresa,
-                       p.pet_id, p.nome_pet, a.data_inicio AS quando_ts, NULL::date AS quando_date
-                FROM flutz.atendimento a
-                JOIN flutz.atendimento_status st ON st.atendimento_status_id = a.atendimento_status_id
-                JOIN flutz.empresa e ON e.empresa_id = a.empresa_id
-                JOIN flutz.pet p ON p.pet_id = a.pet_id
-                WHERE a.cliente_id = ?
-                  AND LOWER(st.descricao) = 'concluido'
-                  AND NOT EXISTS (
-                    SELECT 1 FROM flutz.avaliacao av
-                    WHERE av.empresa_id = a.empresa_id AND av.cliente_id = a.cliente_id
-                  )
-                UNION ALL
-                SELECT h.historico_vacinacao_id, 'VACINACAO', col.empresa_id, e.nome_empresa,
-                       p.pet_id, p.nome_pet, NULL::timestamp, h.data_aplicacao
-                FROM flutz.historico_vacinacao h
-                JOIN flutz.pet p ON p.pet_id = h.pet_id
-                JOIN flutz.colaborador col ON col.colaborador_id = h.colaborador_id
-                JOIN flutz.empresa e ON e.empresa_id = col.empresa_id
-                WHERE p.cliente_id = ?
-                  AND NOT EXISTS (
-                    SELECT 1 FROM flutz.avaliacao av
-                    WHERE av.empresa_id = col.empresa_id AND av.cliente_id = p.cliente_id
-                  )
+                SELECT origem_id, origem, empresa_id, nome_empresa, pet_id, nome_pet, quando_ts, quando_date
+                FROM (
+                    SELECT a.atendimento_id AS origem_id, 'ATENDIMENTO' AS origem, e.empresa_id, e.nome_empresa,
+                           p.pet_id, p.nome_pet, a.data_inicio AS quando_ts, NULL::date AS quando_date
+                    FROM flutz.atendimento a
+                    JOIN flutz.atendimento_status st ON st.atendimento_status_id = a.atendimento_status_id
+                    JOIN flutz.empresa e ON e.empresa_id = a.empresa_id
+                    JOIN flutz.pet p ON p.pet_id = a.pet_id
+                    WHERE a.cliente_id = ?
+                      AND LOWER(st.descricao) = 'concluido'
+                      AND NOT EXISTS (
+                        SELECT 1 FROM flutz.avaliacao av
+                        WHERE av.empresa_id = a.empresa_id AND av.cliente_id = a.cliente_id
+                      )
+                    UNION ALL
+                    SELECT h.historico_vacinacao_id, 'VACINACAO', col.empresa_id, e.nome_empresa,
+                           p.pet_id, p.nome_pet, NULL::timestamp, h.data_aplicacao
+                    FROM flutz.historico_vacinacao h
+                    JOIN flutz.pet p ON p.pet_id = h.pet_id
+                    JOIN flutz.colaborador col ON col.colaborador_id = h.colaborador_id
+                    JOIN flutz.empresa e ON e.empresa_id = col.empresa_id
+                    WHERE p.cliente_id = ?
+                      AND NOT EXISTS (
+                        SELECT 1 FROM flutz.avaliacao av
+                        WHERE av.empresa_id = col.empresa_id AND av.cliente_id = p.cliente_id
+                      )
+                ) pendentes
                 ORDER BY COALESCE(quando_ts, quando_date::timestamp) DESC NULLS LAST, origem_id DESC
                 """,
                 (rs, i) -> new Pendente(
