@@ -300,7 +300,14 @@ public class ClinicService {
         servico.setDuracaoMinutos(req.duracaoMinutos());
         servico.setVisivelPagina(req.visivelPagina() == null || req.visivelPagina());
         servico.setStatus(ativo());
-        return ServicoResponse.from(servicos.save(servico));
+        try {
+            return ServicoResponse.from(servicos.save(servico));
+        } catch (Exception ex) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Já existe um serviço com esse nome para este tipo nesta clínica"
+            );
+        }
     }
 
     @Transactional

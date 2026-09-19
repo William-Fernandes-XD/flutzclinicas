@@ -32,6 +32,15 @@ public class SmtpEmailService implements EmailService {
 
     @Override
     public void send(String to, String subject, String body) {
+        sendInternal(to, subject, body, false);
+    }
+
+    @Override
+    public void sendHtml(String to, String subject, String htmlBody) {
+        sendInternal(to, subject, htmlBody, true);
+    }
+
+    private void sendInternal(String to, String subject, String body, boolean html) {
         if (!ready()) {
             log.warn("Mail is not configured. Skipping message to {}", mask(to));
             return;
@@ -53,7 +62,7 @@ public class SmtpEmailService implements EmailService {
             }
             helper.setTo(to);
             helper.setSubject(subject);
-            helper.setText(body, false);
+            helper.setText(body, html);
             sender.send(message);
             log.info("Mail sent to {} subject={}", mask(to), subject);
         } catch (Exception ex) {

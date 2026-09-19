@@ -382,29 +382,79 @@ public class SupportService {
         }
         String origem = origem(auth.tipo().name());
         String clinica = clinicaNome(auth.empresaId());
-        String corpo = """
-                Novo pedido de suporte no Flutz
-
-                Origem: %s
-                Nome: %s
-                E-mail: %s
-                Clínica: %s
-                Motivo: %s
-
-                %s
+        String clinicaLabel = clinica == null || clinica.isBlank() ? "—" : clinica;
+        String site = properties.app() != null && AppProperties.hasText(properties.app().frontendUrl())
+                ? properties.app().frontendUrl().replaceAll("/$", "")
+                : "https://flutzclinicas.com.br";
+        String logoUrl = site + "/logo-flutz.png";
+        String html = """
+                <!DOCTYPE html>
+                <html lang="pt-BR">
+                <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+                <body style="margin:0;padding:0;background:#f4f6f5;font-family:Segoe UI,Helvetica,Arial,sans-serif;color:#1f2933;">
+                  <table role="presentation" width="100%%" cellspacing="0" cellpadding="0" style="background:#f4f6f5;padding:24px 12px;">
+                    <tr><td align="center">
+                      <table role="presentation" width="100%%" style="max-width:560px;background:#ffffff;border:1px solid #e5e9e6;border-radius:8px;overflow:hidden;">
+                        <tr>
+                          <td style="padding:20px 24px;border-bottom:1px solid #e5e9e6;background:#fafbfa;">
+                            <img src="%s" alt="Flutz" width="120" style="display:block;height:auto;border:0;" />
+                            <p style="margin:12px 0 0;font-size:13px;color:#5c6b66;letter-spacing:0.04em;text-transform:uppercase;">Suporte</p>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td style="padding:24px;">
+                            <h1 style="margin:0 0 8px;font-size:20px;font-weight:600;color:#1f2933;">Novo pedido de suporte</h1>
+                            <p style="margin:0 0 20px;font-size:14px;line-height:1.5;color:#5c6b66;">Um usuário abriu um ticket no Flutz.</p>
+                            <table role="presentation" width="100%%" cellspacing="0" cellpadding="0" style="font-size:14px;line-height:1.6;">
+                              <tr><td style="padding:6px 0;color:#5c6b66;width:110px;">Origem</td><td style="padding:6px 0;font-weight:600;">%s</td></tr>
+                              <tr><td style="padding:6px 0;color:#5c6b66;">Nome</td><td style="padding:6px 0;font-weight:600;">%s</td></tr>
+                              <tr><td style="padding:6px 0;color:#5c6b66;">E-mail</td><td style="padding:6px 0;"><a href="mailto:%s" style="color:#3d6b5a;">%s</a></td></tr>
+                              <tr><td style="padding:6px 0;color:#5c6b66;">Clínica</td><td style="padding:6px 0;">%s</td></tr>
+                              <tr><td style="padding:6px 0;color:#5c6b66;">Motivo</td><td style="padding:6px 0;font-weight:600;">%s</td></tr>
+                            </table>
+                            <div style="margin-top:20px;padding:16px;background:#f7f8f7;border-radius:6px;border:1px solid #e5e9e6;">
+                              <p style="margin:0 0 8px;font-size:12px;color:#5c6b66;text-transform:uppercase;letter-spacing:0.04em;">Mensagem</p>
+                              <p style="margin:0;font-size:14px;line-height:1.6;white-space:pre-wrap;">%s</p>
+                            </div>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td style="padding:16px 24px;border-top:1px solid #e5e9e6;font-size:12px;color:#8a9691;">
+                            Mensagem automática do Flutz · %s
+                          </td>
+                        </tr>
+                      </table>
+                    </td></tr>
+                  </table>
+                </body>
+                </html>
                 """.formatted(
-                origem,
-                contato.nome(),
-                contato.email(),
-                clinica == null || clinica.isBlank() ? "—" : clinica,
-                motivo,
-                mensagem
+                logoUrl,
+                escapeHtml(origem),
+                escapeHtml(contato.nome()),
+                escapeHtml(contato.email()),
+                escapeHtml(contato.email()),
+                escapeHtml(clinicaLabel),
+                escapeHtml(motivo),
+                escapeHtml(mensagem),
+                escapeHtml(site)
         );
         try {
-            email.send(destino, "Suporte Flutz: " + motivo, corpo);
+            email.sendHtml(destino, "Suporte Flutz: " + motivo, html);
         } catch (RuntimeException ex) {
             log.error("Ticket gravado, mas o aviso por e-mail falhou", ex);
         }
+    }
+
+    private static String escapeHtml(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value
+                .replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;");
     }
 
     private String clinicaNome(Integer empresaId) {

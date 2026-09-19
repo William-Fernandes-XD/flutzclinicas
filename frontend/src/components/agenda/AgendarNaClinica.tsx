@@ -99,8 +99,12 @@ export function AgendarNaClinica({
       if (payload.foto) {
         try {
           await uploadPerfilFoto({ alvo: "pet", arquivo: payload.foto, petId: pet.id });
-        } catch {
-          /* pet já cadastrado */
+        } catch (err) {
+          toast.push(
+            err instanceof Error
+              ? `Pet cadastrado, mas a foto não foi salva: ${err.message}`
+              : "Pet cadastrado, mas a foto não foi salva.",
+          );
         }
       }
       return pet;
@@ -265,7 +269,7 @@ export function AgendarNaClinica({
           </button>
         </div>
 
-        <div className="mt-4 -mx-1 flex gap-2 overflow-x-auto pb-2">
+        <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6">
           {dateTabs.length ? (
             dateTabs.map((tab) => {
               const selected = tab.data === dia;
@@ -278,7 +282,7 @@ export function AgendarNaClinica({
                     setDia(tab.data);
                     setSlot("");
                   }}
-                  className={`min-w-[4.75rem] shrink-0 rounded-2xl px-3 py-2.5 text-left transition ${
+                  className={`rounded-2xl px-2 py-2.5 text-left transition sm:px-3 ${
                     selected
                       ? "bg-brand text-white shadow-md"
                       : closed
@@ -297,7 +301,7 @@ export function AgendarNaClinica({
               );
             })
           ) : (
-            <p className="px-1 text-sm text-muted">Nenhuma data disponível neste mês.</p>
+            <p className="col-span-full px-1 text-sm text-muted">Nenhuma data disponível neste mês.</p>
           )}
         </div>
 
@@ -406,7 +410,7 @@ export function AgendarNaClinica({
               {live && disponibilidade.isLoading ? <p className="text-xs text-muted">Atualizando agenda…</p> : null}
             </div>
 
-            <div className="mt-4 grid grid-cols-3 gap-1.5 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
+            <div className="mt-4 grid grid-cols-3 gap-1.5 sm:grid-cols-4 md:grid-cols-6">
               {slots.length ? (
                 slots.map((item) => (
                   <SlotButton key={item.inicio} item={item} selected={slot === item.inicio} onSelect={setSlot} />

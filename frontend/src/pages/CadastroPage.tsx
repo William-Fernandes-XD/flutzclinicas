@@ -98,8 +98,9 @@ function TutorSignup() {
       if (foto) {
         try {
           await uploadPerfilFoto({ alvo: "tutor", arquivo: foto });
-        } catch {
-          /* cadastro já concluído; a foto pode ser enviada depois */
+        } catch (err) {
+          /* cadastro ok; foto pode falhar (Drive/tamanho) — avisar */
+          console.warn("Foto de perfil não enviada no cadastro", err);
         }
       }
       navigate(homeFor(session), { replace: true });

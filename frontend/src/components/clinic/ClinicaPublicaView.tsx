@@ -4,7 +4,6 @@ import {
   Heart,
   Mail,
   MapPin,
-  MessageCircle,
   PawPrint,
   Phone,
   Share2,
@@ -13,6 +12,7 @@ import {
 } from "lucide-react";
 import type { MouseEvent, ReactNode } from "react";
 import { Link } from "react-router-dom";
+import { WhatsAppIcon, toWhatsAppUrl } from "../icons/WhatsAppIcon";
 import { env } from "../../lib/env";
 import { mediaUrl } from "../../lib/media";
 import { petArt } from "../../lib/pets-art";
@@ -21,6 +21,7 @@ import type { PageItem, PublicClinic, PublicMembro } from "../../services/api";
 import { AgendarNaClinica } from "../agenda/AgendarNaClinica";
 import { Button } from "../ui/Button";
 import { EmptyState } from "../ui/EmptyState";
+import { GaleriaCarousel } from "./GaleriaCarousel";
 
 const PASTELS = [
   "bg-violet-100 text-brand",
@@ -155,9 +156,16 @@ export function ClinicaPublicaView({
     ? hero.topicos.filter((item) => item.titulo.trim())
     : DEFAULT_TOPICOS;
   const loginNext = `/login?next=${encodeURIComponent(`/clinica/${clinica.slug}#agendar`)}`;
+  const whatsappRede = data.redes.find((rede) => {
+    const value = `${rede.nome} ${rede.url}`.toLowerCase();
+    return value.includes("whats") || value.includes("wa.me");
+  });
+  const whatsappHref =
+    whatsappRede?.url ||
+    (clinica.telefone || env.contactWhatsapp ? toWhatsAppUrl(clinica.telefone || env.contactWhatsapp) : null);
 
   return (
-    <div className={`min-w-0 bg-white text-ink ${preview ? "" : "min-h-svh"}`}>
+    <div className={`relative min-w-0 bg-white text-ink ${preview ? "" : "min-h-svh"}`}>
       <header className="sticky top-0 z-30 border-b border-violet-100/80 bg-white/95 backdrop-blur [[data-public-panel]_&]:top-14 lg:[[data-public-panel]_&]:top-0">
         <div className="mx-auto flex h-16 w-full max-w-6xl items-center gap-4 px-4 sm:h-[4.25rem] sm:px-6">
           <a
@@ -414,11 +422,7 @@ export function ClinicaPublicaView({
                 {!data.galeria?.length ? (
                   <p className="mt-3 text-sm text-muted">As fotos escolhidas aparecem aqui.</p>
                 ) : (
-                  <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-3">
-                    {data.galeria.map((item) => (
-                      <img key={item.id} src={mediaUrl(item.url)} alt={item.alt ?? ""} className="aspect-square w-full rounded-3xl object-cover" />
-                    ))}
-                  </div>
+                  <GaleriaCarousel items={data.galeria} />
                 )}
               </PageSection>
             );
@@ -480,6 +484,17 @@ export function ClinicaPublicaView({
                         </p>
                       ) : preview ? (
                         <p className="mt-1 text-sm text-muted">E-mail da clínica</p>
+                      ) : null}
+                      {(clinica.telefone || env.contactWhatsapp) && !preview ? (
+                        <a
+                          href={toWhatsAppUrl(clinica.telefone || env.contactWhatsapp)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="mt-2 inline-flex items-center gap-2 text-sm font-semibold text-[#128C7E] hover:underline"
+                        >
+                          <WhatsAppIcon className="size-4" />
+                          WhatsApp
+                        </a>
                       ) : null}
                     </div>
                   </div>
@@ -578,13 +593,13 @@ export function ClinicaPublicaView({
                     </span>
                     {clinica.telefone || env.contactWhatsapp ? (
                       <a
-                        href={`https://wa.me/${(clinica.telefone || env.contactWhatsapp).replace(/\D/g, "")}`}
+                        href={toWhatsAppUrl(clinica.telefone || env.contactWhatsapp)}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex size-10 items-center justify-center rounded-full bg-white ring-1 ring-violet-100 hover:bg-brand-soft"
+                        className="inline-flex size-10 items-center justify-center rounded-full bg-white text-[#128C7E] ring-1 ring-violet-100 hover:bg-brand-soft"
                         aria-label="WhatsApp"
                       >
-                        <MessageCircle className="size-4" />
+                        <WhatsAppIcon className="size-4" />
                       </a>
                     ) : null}
                   </>
@@ -600,6 +615,18 @@ export function ClinicaPublicaView({
           </p>
         ) : null}
       </footer>
+
+      {whatsappHref && !preview ? (
+        <a
+          href={whatsappHref}
+          target="_blank"
+          rel="noreferrer"
+          aria-label="Falar no WhatsApp"
+          className="fixed right-4 bottom-4 z-40 inline-flex size-14 items-center justify-center rounded-full bg-[#25D366] text-white shadow-[0_12px_28px_-8px_rgba(37,211,102,0.7)] transition hover:scale-105 hover:bg-[#1ebe57] sm:right-6 sm:bottom-6"
+        >
+          <WhatsAppIcon className="size-7" />
+        </a>
+      ) : null}
     </div>
   );
 }
@@ -608,7 +635,7 @@ function SocialIcon({ nome, url }: { nome: string; url: string }) {
   const value = `${nome} ${url}`.toLowerCase();
   if (value.includes("insta")) return <Camera className="size-4" />;
   if (value.includes("face") || value.includes("fb.com")) return <Share2 className="size-4" />;
-  if (value.includes("whats") || value.includes("wa.me")) return <MessageCircle className="size-4" />;
+  if (value.includes("whats") || value.includes("wa.me")) return <WhatsAppIcon className="size-4" />;
   return <PawPrint className="size-4" />;
 }
 

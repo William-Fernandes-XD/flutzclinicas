@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Button } from "../ui/Button";
 import { Modal } from "../ui/Modal";
+import { readBrowserPosition } from "../../lib/geo";
 import { isTutor } from "../../lib/session";
 import { useAuth } from "../../providers/AuthProvider";
 import { api } from "../../services/api";
@@ -26,6 +27,9 @@ export function TutorLocationGate() {
       await queryClient.invalidateQueries({ queryKey: ["agenda-clinicas"] });
       setOpen(false);
     },
+    onError: () => {
+      setErro("Não foi possível salvar a localização. Tente de novo.");
+    },
   });
 
   useEffect(() => {
@@ -41,23 +45,16 @@ export function TutorLocationGate() {
     setOpen(false);
   }
 
-  function pedir() {
+  async function pedir() {
     if (salvar.isPending) return;
     setErro("");
-    if (!navigator.geolocation) {
-      setErro("Este navegador não informa localização.");
-      return;
+    try {
+      const pos = await readBrowserPosition();
+      sessionStorage.setItem(ASKED_KEY, "1");
+      salvar.mutate({ latitude: pos.latitude, longitude: pos.longitude });
+    } catch (err) {
+      setErro(err instanceof Error ? err.message : "Não foi possível obter a localização.");
     }
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        sessionStorage.setItem(ASKED_KEY, "1");
-        salvar.mutate({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
-      },
-      () => {
-        setErro("Não foi possível obter a localização. Você pode tentar de novo em Minhas clínicas.");
-      },
-      { enableHighAccuracy: true, timeout: 15000 },
-    );
   }
 
   return (
@@ -70,7 +67,7 @@ export function TutorLocationGate() {
           <Button variant="ghost" onClick={recusar}>
             Agora não
           </Button>
-          <Button onClick={pedir} busy={salvar.isPending} busyLabel="Salvando…">
+          <Button onClick={() => void pedir()} busy={salvar.isPending} busyLabel="Salvando…">
             Permitir
           </Button>
         </div>

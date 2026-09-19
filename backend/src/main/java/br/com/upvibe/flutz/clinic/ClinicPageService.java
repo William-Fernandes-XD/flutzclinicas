@@ -87,22 +87,31 @@ public class ClinicPageService {
         }
         jdbc.update(
                 """
-                INSERT INTO flutz.hero_section (empresa_id, titulo, subtitulo, texto_resumo, imagem_fundo_url, imagem_posicao_id)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO flutz.hero_section (
+                    empresa_id, titulo, subtitulo, texto_resumo, imagem_fundo_url, imagem_posicao_id,
+                    cor_fundo, usar_imagem_fundo, mostrar_imagem_lateral
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (empresa_id)
                 DO UPDATE SET
                     titulo = EXCLUDED.titulo,
                     subtitulo = EXCLUDED.subtitulo,
                     texto_resumo = EXCLUDED.texto_resumo,
                     imagem_fundo_url = COALESCE(EXCLUDED.imagem_fundo_url, hero_section.imagem_fundo_url),
-                    imagem_posicao_id = COALESCE(EXCLUDED.imagem_posicao_id, hero_section.imagem_posicao_id)
+                    imagem_posicao_id = COALESCE(EXCLUDED.imagem_posicao_id, hero_section.imagem_posicao_id),
+                    cor_fundo = EXCLUDED.cor_fundo,
+                    usar_imagem_fundo = EXCLUDED.usar_imagem_fundo,
+                    mostrar_imagem_lateral = EXCLUDED.mostrar_imagem_lateral
                 """,
                 empresa.getId(),
                 req.titulo().trim(),
                 blank(req.subtitulo()),
                 blank(req.texto()),
                 blank(req.imagemFundoUrl()),
-                req.imagemPosicaoId()
+                req.imagemPosicaoId(),
+                blank(req.corFundo()),
+                req.usarImagemFundo() != null && req.usarImagemFundo(),
+                req.mostrarImagemLateral() == null || req.mostrarImagemLateral()
         );
         Integer heroId = jdbc.queryForObject(
                 "SELECT hero_section_id FROM flutz.hero_section WHERE empresa_id = ?",
@@ -372,7 +381,8 @@ public class ClinicPageService {
         Hero hero = jdbc.query(
                 """
                 SELECT h.hero_section_id, h.titulo, h.subtitulo, h.texto_resumo, h.imagem_fundo_url,
-                       h.imagem_posicao_id, p.posicao
+                       h.imagem_posicao_id, p.posicao,
+                       h.cor_fundo, h.usar_imagem_fundo, h.mostrar_imagem_lateral
                 FROM flutz.hero_section h
                 LEFT JOIN flutz.imagem_posicao p ON p.imagem_posicao_id = h.imagem_posicao_id
                 WHERE h.empresa_id = ?
@@ -385,6 +395,9 @@ public class ClinicPageService {
                                 rs.getString("imagem_fundo_url"),
                                 (Integer) rs.getObject("imagem_posicao_id"),
                                 rs.getString("posicao"),
+                                rs.getString("cor_fundo"),
+                                rs.getBoolean("usar_imagem_fundo"),
+                                rs.getBoolean("mostrar_imagem_lateral"),
                                 topicos(rs.getInt("hero_section_id"))
                         )
                         : null,
@@ -614,6 +627,9 @@ public class ClinicPageService {
             String imagemFundoUrl,
             Integer imagemPosicaoId,
             String posicao,
+            String corFundo,
+            boolean usarImagemFundo,
+            boolean mostrarImagemLateral,
             List<Topico> topicos
     ) {
     }
@@ -624,6 +640,9 @@ public class ClinicPageService {
             String texto,
             String imagemFundoUrl,
             Integer imagemPosicaoId,
+            String corFundo,
+            Boolean usarImagemFundo,
+            Boolean mostrarImagemLateral,
             List<TopicoReq> topicos
     ) {
     }

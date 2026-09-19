@@ -20,6 +20,7 @@ import { Avatar } from "../../components/ui/Avatar";
 import { EmptyState, LoadingState } from "../../components/ui/EmptyState";
 import { Modal } from "../../components/ui/Modal";
 import { formatKm, isoDate } from "../../lib/agenda";
+import { readBrowserPosition } from "../../lib/geo";
 import { mediaUrl } from "../../lib/media";
 import { api, type AgendaClinic } from "../../services/api";
 
@@ -55,21 +56,15 @@ export function ClientClinicasPage() {
   }, []);
 
   function pedirGps() {
-    if (!navigator.geolocation) {
-      setGps("denied");
-      return;
-    }
     setGps("asking");
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const next = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
+    void readBrowserPosition()
+      .then((pos) => {
+        const next = { latitude: pos.latitude, longitude: pos.longitude };
         setCoords(next);
         setGps("ok");
         void api.saveTutorLocation(next).catch(() => undefined);
-      },
-      () => setGps("denied"),
-      { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 },
-    );
+      })
+      .catch(() => setGps("denied"));
   }
 
   function limparFiltros() {

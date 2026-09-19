@@ -13,12 +13,8 @@ import {
   resolveSpeciesIconId,
   type SpeciesIconId,
 } from "../../lib/species-icons";
-import {
-  SERVICE_ICON_PALETTE,
-  ServiceTypeIcon,
-  resolveServiceIconId,
-  type ServiceIconId,
-} from "../../lib/service-icons";
+import { ServiceTypeIcon, resolveServiceIconId, type ServiceIconId } from "../../lib/service-icons";
+import { ServiceIconPicker } from "../../components/clinic/ServiceIconPicker";
 import { useToast } from "../../providers/ToastProvider";
 
 const TIPOS = [
@@ -415,35 +411,7 @@ export function ClinicCatalogosPage() {
         ) : null}
 
         {tipo === "tipos-servico" ? (
-          <div>
-            <p className="mb-2 text-xs font-semibold tracking-wide text-muted uppercase">Escolha o ícone</p>
-            <div className="grid grid-cols-4 gap-2 sm:grid-cols-6 md:grid-cols-8">
-              {SERVICE_ICON_PALETTE.map((opt) => {
-                const selected = iconeServico === opt.id;
-                return (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    title={opt.label}
-                    onClick={() => {
-                      setIconeServico(opt.id);
-                      if (!editando && (!nome.trim() || SERVICE_ICON_PALETTE.some((p) => p.nomeSugerido === nome))) {
-                        setNome(opt.nomeSugerido);
-                      }
-                    }}
-                    className={`flex flex-col items-center gap-1 rounded-2xl px-2 py-2.5 text-center transition ${
-                      selected
-                        ? "bg-[#7828c8] text-white shadow-sm"
-                        : "bg-[#f7f1fc] text-[#5c4d78] hover:bg-[#ebe0fa]"
-                    }`}
-                  >
-                    <ServiceTypeIcon icone={opt.id} className="size-6" />
-                    <span className="line-clamp-1 text-[10px] font-semibold leading-tight">{opt.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          <ServiceIconPicker value={iconeServico} onChange={setIconeServico} />
         ) : null}
 
         <div className="flex min-w-0 flex-col gap-3 sm:flex-row">

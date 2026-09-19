@@ -33,7 +33,8 @@ export function readBrowserPosition(): Promise<BrowserCoords> {
         }
         reject(new Error("Não foi possível obter a localização deste aparelho."));
       },
-      { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 },
+      // maximumAge 0 evita cache antigo (ex.: localização de outro lugar).
+      { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 },
     );
   });
 }

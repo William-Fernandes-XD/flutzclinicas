@@ -43,8 +43,8 @@ public class ClinicMediaService {
         if (arquivo == null || arquivo.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Envie um arquivo de imagem");
         }
-        if (arquivo.getSize() > 2_000_000) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A imagem deve ter no máximo 2 MB");
+        if (arquivo.getSize() > 5_000_000) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A imagem deve ter no máximo 5 MB");
         }
         String tipo = destino == null ? "" : destino.toLowerCase(Locale.ROOT);
         if (!DESTINOS.contains(tipo)) {
@@ -57,9 +57,18 @@ public class ClinicMediaService {
         String nome = "logo".equals(tipo) || "hero".equals(tipo)
                 ? tipo + "." + ext
                 : tipo + "-" + UUID.randomUUID() + "." + ext;
-        if (drive.requested()) {
-            drive.gravar(empresaId, nome, arquivo);
-            return new ArquivoSalvo("/api/public/arquivos/" + empresaId + "/" + nome, tipo, nome);
+        if (drive.requested() && drive.enabled()) {
+            try {
+                drive.gravar(empresaId, nome, arquivo);
+                return new ArquivoSalvo("/api/public/arquivos/" + empresaId + "/" + nome, tipo, nome);
+            } catch (ResponseStatusException ex) {
+                // Drive configurado mas indisponível: grava local para não perder a foto do usuário.
+                org.slf4j.LoggerFactory.getLogger(ClinicMediaService.class)
+                        .warn("Drive falhou ({}). Salvando imagem localmente.", ex.getReason());
+            }
+        } else if (drive.requested() && !drive.enabled()) {
+            org.slf4j.LoggerFactory.getLogger(ClinicMediaService.class)
+                    .warn("GOOGLE_DRIVE_ENABLED=true, mas Drive não está pronto. Salvando no disco.");
         }
         Path pasta = pasta(empresaId);
         try {
@@ -68,7 +77,8 @@ public class ClinicMediaService {
             if (!destinoArquivo.startsWith(pasta)) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Nome de arquivo inválido");
             }
-            arquivo.transferTo(destinoArquivo);
+            // MultipartFile.transferTo pode falhar se o stream já foi lido (ex.: tentativa no Drive).
+            Files.write(destinoArquivo, arquivo.getBytes());
         } catch (IOException ex) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Não foi possível gravar a imagem");
         }

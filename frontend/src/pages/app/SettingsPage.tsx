@@ -73,7 +73,10 @@ export function SettingsPage() {
             titulo={tutor ? "Sua foto" : "Foto do colaborador"}
             atual={data.fotoUrl}
             alvo={tutor ? "tutor" : "colaborador"}
-            onSaved={() => queryClient.invalidateQueries({ queryKey: ["perfil"] })}
+            onSaved={() => {
+              void queryClient.invalidateQueries({ queryKey: ["perfil"] });
+              void queryClient.invalidateQueries({ queryKey: ["auth", "me"] });
+            }}
           />
           ) : null}
           <form onSubmit={onSubmit} className="grid gap-4">
@@ -110,7 +113,10 @@ export function SettingsPage() {
                   titulo="Logo da clínica"
                   atual={data.logoUrl}
                   alvo="clinica"
-                  onSaved={() => queryClient.invalidateQueries({ queryKey: ["perfil"] })}
+                  onSaved={() => {
+              void queryClient.invalidateQueries({ queryKey: ["perfil"] });
+              void queryClient.invalidateQueries({ queryKey: ["auth", "me"] });
+            }}
                 />
                 <Field label="Nome da clínica"><Input name="nomeClinica" defaultValue={data.nomeClinica ?? ""} /></Field>
                 <Field label="E-mail da clínica"><Input name="emailClinica" type="email" defaultValue={data.emailClinica ?? ""} /></Field>
@@ -178,7 +184,7 @@ function FotoBloco({
       {shown ? (
         <img src={shown} alt="" className="size-28 rounded-2xl object-cover" />
       ) : (
-        <p className="text-sm text-muted">Nenhuma foto ainda. PNG, JPG ou WEBP até 2 MB.</p>
+        <p className="text-sm text-muted">Nenhuma foto ainda. PNG, JPG ou WEBP até 5 MB.</p>
       )}
       <input
         type="file"

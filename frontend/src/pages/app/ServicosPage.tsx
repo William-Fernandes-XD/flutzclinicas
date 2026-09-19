@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Power, Trash2 } from "lucide-react";
 import { useMemo, useState, type FormEvent } from "react";
+import { ServiceIconPicker } from "../../components/clinic/ServiceIconPicker";
 import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
 import { DataTable } from "../../components/ui/DataTable";
@@ -10,7 +11,7 @@ import { Modal } from "../../components/ui/Modal";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { servicosSugeridosPorTipo } from "../../lib/catalog-presets";
 import { http, HttpError } from "../../lib/http";
-import { ServiceTypeIcon } from "../../lib/service-icons";
+import { resolveServiceIconId, ServiceTypeIcon, type ServiceIconId } from "../../lib/service-icons";
 import { useToast } from "../../providers/ToastProvider";
 
 type Servico = {
@@ -32,10 +33,14 @@ export function ServicosPage() {
   const [tipoId, setTipoId] = useState("");
   const [nomeExibicao, setNomeExibicao] = useState("");
   const [preco, setPreco] = useState("");
+  const [iconeServico, setIconeServico] = useState<ServiceIconId>("consulta");
   const [desativarDe, setDesativarDe] = useState<{ servico: Servico; porConflito: boolean } | null>(null);
 
   const lista = useQuery({ queryKey: ["servicos"], queryFn: () => http<Servico[]>("/api/servicos") });
-  const tipos = useQuery({ queryKey: ["tipos-servico"], queryFn: () => http<Tipo[]>("/api/catalogos/tipos-servico") });
+  const tipos = useQuery({
+    queryKey: ["tipos-servico"],
+    queryFn: () => http<Tipo[]>("/api/clinica/catalogos/tipos-servico"),
+  });
 
   const tipoSelecionado = useMemo(
     () => (tipos.data ?? []).find((t) => String(t.id) === tipoId) ?? null,
@@ -49,18 +54,45 @@ export function ServicosPage() {
 
   const invalidar = () => {
     queryClient.invalidateQueries({ queryKey: ["servicos"] });
+    queryClient.invalidateQueries({ queryKey: ["tipos-servico"] });
     queryClient.invalidateQueries({ queryKey: ["agenda"] });
     queryClient.invalidateQueries({ queryKey: ["pagina"] });
   };
 
   const criar = useMutation({
-    mutationFn: (body: Record<string, unknown>) => http("/api/servicos", { method: "POST", json: body }),
+    mutationFn: async (body: {
+      tipoServicoId: number;
+      nomeExibicao?: string;
+      preco: number;
+      visivelPagina: boolean;
+      icone: ServiceIconId;
+      tipoNome: string;
+      iconeAtual?: string | null;
+    }) => {
+      const iconeAtual = resolveServiceIconId(body.iconeAtual, body.tipoNome);
+      if (body.icone !== iconeAtual) {
+        await http(`/api/clinica/catalogos/tipos-servico/${body.tipoServicoId}`, {
+          method: "PUT",
+          json: { nome: body.tipoNome, icone: body.icone },
+        });
+      }
+      return http("/api/servicos", {
+        method: "POST",
+        json: {
+          tipoServicoId: body.tipoServicoId,
+          nomeExibicao: body.nomeExibicao,
+          preco: body.preco,
+          visivelPagina: body.visivelPagina,
+        },
+      });
+    },
     onSuccess: () => {
       invalidar();
       setOpen(false);
       setTipoId("");
       setNomeExibicao("");
       setPreco("");
+      setIconeServico("consulta");
       toast.push("Serviço oferecido nesta clínica.");
     },
   });
@@ -99,7 +131,7 @@ export function ServicosPage() {
         setError("Informe um preço válido para o serviço.");
         return;
       }
-      if (!tipoId) {
+      if (!tipoId || !tipoSelecionado) {
         setError("Selecione o tipo de serviço.");
         return;
       }
@@ -108,6 +140,9 @@ export function ServicosPage() {
         nomeExibicao: nomeExibicao.trim() || undefined,
         preco: valor,
         visivelPagina: true,
+        icone: iconeServico,
+        tipoNome: tipoSelecionado.nome,
+        iconeAtual: tipoSelecionado.icone,
       });
     } catch (err) {
       setError(err instanceof HttpError ? err.message : "Falha ao oferecer serviço");
@@ -133,7 +168,7 @@ export function ServicosPage() {
     <div>
       <PageHeader
         title="Serviços"
-        description="Ofereça tipos de serviço com nome e preço desta clínica. Escolha um tipo para ver sugestões comuns."
+        description="Ofereça tipos de serviço com nome, ícone e preço desta clínica. Escolha um tipo para ver sugestões comuns."
         actions={<Button onClick={() => setOpen(true)}>+ Oferecer serviço</Button>}
       />
       {!lista.data?.length ? (
@@ -254,6 +289,7 @@ export function ServicosPage() {
         open={open}
         title="Oferecer serviço"
         onClose={() => setOpen(false)}
+        wide
         footer={
           <Button type="submit" form="servico-form" busy={criar.isPending} busyLabel="Salvando…">
             Salvar
@@ -272,6 +308,7 @@ export function ServicosPage() {
                   setTipoId(id);
                   const tipo = (tipos.data ?? []).find((item) => String(item.id) === id);
                   setNomeExibicao(tipo?.nome ?? "");
+                  setIconeServico(resolveServiceIconId(tipo?.icone, tipo?.nome));
                 }}
               >
                 <option value="">Selecione</option>
@@ -284,11 +321,8 @@ export function ServicosPage() {
             </Field>
 
             {tipoSelecionado ? (
-              <div className="flex items-center gap-2 text-sm text-muted sm:col-span-2">
-                <span className="inline-flex size-9 items-center justify-center rounded-xl bg-[#f3eafc] text-[#7828c8]">
-                  <ServiceTypeIcon icone={tipoSelecionado.icone} nome={tipoSelecionado.nome} className="size-4" />
-                </span>
-                Ícone do tipo: {tipoSelecionado.nome}
+              <div className="sm:col-span-2">
+                <ServiceIconPicker value={iconeServico} onChange={setIconeServico} />
               </div>
             ) : null}
 

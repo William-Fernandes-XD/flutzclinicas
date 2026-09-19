@@ -23,6 +23,7 @@ export function AppShell({ variant }: { variant: PanelVariant }) {
   const [desktopNav, setDesktopNav] = useState(true);
   const [mobileNav, setMobileNav] = useState(false);
   const groups = navFor(variant, session);
+  const pageBuilder = location.pathname === "/app/pagina";
   const acesso = useQuery({
     queryKey: ["assinatura", "acesso", session?.empresaId],
     queryFn: api.acessoAssinatura,
@@ -162,7 +163,13 @@ export function AppShell({ variant }: { variant: PanelVariant }) {
           ) : null}
         </AnimatePresence>
 
-        <main className="mx-auto w-full min-w-0 max-w-6xl flex-1 px-4 py-6 sm:px-6 sm:py-8">
+        <main
+          className={
+            pageBuilder
+              ? "flex h-[calc(100svh-3.5rem)] w-full min-w-0 flex-1 flex-col overflow-hidden p-0 lg:h-[calc(100svh-4rem)]"
+              : "mx-auto w-full min-w-0 max-w-6xl flex-1 px-4 py-6 sm:px-6 sm:py-8"
+          }
+        >
           <Outlet />
         </main>
       </div>

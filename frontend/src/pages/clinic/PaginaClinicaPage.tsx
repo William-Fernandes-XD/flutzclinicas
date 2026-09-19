@@ -1,14 +1,25 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import {
+  ChevronDown,
+  ChevronUp,
+  Eye,
+  EyeOff,
+  Layers,
+  Monitor,
+  Smartphone,
+  Tablet,
+  ExternalLink,
+} from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { ClinicaPublicaView, editorToPublic } from "../../components/clinic/ClinicaPublicaView";
 import { ImagePickField } from "../../components/clinic/ImagePickField";
 import { Button } from "../../components/ui/Button";
 import { ErrorState, LoadingState } from "../../components/ui/EmptyState";
 import { Field, Input, Select, Surface, Textarea } from "../../components/ui/Field";
-import { PageHeader } from "../../components/ui/PageHeader";
 import { http, HttpError } from "../../lib/http";
 import { readBrowserPosition, type EnderecoSugerido } from "../../lib/geo";
 import { mediaUrl } from "../../lib/media";
+import { SECTION_CATALOG } from "../../lib/page-builder/catalog";
 import { ensureHero, normalizePageEditor, patchHero } from "../../lib/page-editor";
 import { useClinicBrand } from "../../providers/ClinicContext";
 import { useToast } from "../../providers/ToastProvider";
@@ -20,14 +31,23 @@ const LABELS: Record<string, string> = {
   SERVICOS: "Serviços",
   ESPECIALIDADE: "Especialidades",
   EQUIPE: "Equipe",
-  AVALIACOES: "Avaliações",
+  AVALIACOES: "Depoimentos",
   GALERIA: "Galeria",
   LOCALIZACAO: "Localização",
   CONTATO: "Contato",
-  DOACOES: "Doações",
+  DOACOES: "Campanhas",
 };
 
 const CAMPANHA_VAZIA = { titulo: "", texto: "", metaValor: "", dataInicio: "", dataFim: "" };
+
+type Viewport = "desktop" | "tablet" | "mobile";
+type LeftTab = "estrutura" | "blocos";
+
+const VIEWPORT_WIDTH: Record<Viewport, string> = {
+  desktop: "100%",
+  tablet: "768px",
+  mobile: "390px",
+};
 
 export function PaginaClinicaPage() {
   const toast = useToast();
@@ -37,11 +57,14 @@ export function PaginaClinicaPage() {
   const [atual, setAtual] = useState("HERO");
   const [draft, setDraft] = useState<PageEditor | null>(null);
   const [campanha, setCampanha] = useState(CAMPANHA_VAZIA);
+  const [viewport, setViewport] = useState<Viewport>("desktop");
+  const [leftTab, setLeftTab] = useState<LeftTab>("estrutura");
+  const [propsOpen, setPropsOpen] = useState(true);
   const previewRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!pagina.data) return;
-    setDraft((atual) => atual ?? normalizePageEditor(pagina.data, clinic));
+    setDraft((atualDraft) => atualDraft ?? normalizePageEditor(pagina.data, clinic));
   }, [pagina.data, clinic]);
 
   const refresh = () => {
@@ -52,7 +75,7 @@ export function PaginaClinicaPage() {
   const layout = useMutation({
     mutationFn: api.saveLayout,
     meta: { skipErrorToast: true },
-    onSuccess: () => toast.push("Ordem e visibilidade salvas."),
+    onSuccess: () => toast.push("Layout salvo."),
     onError: (error) => toast.push(error instanceof HttpError ? error.message : "Não foi possível salvar o layout.", "danger"),
   });
   const salvarHero = useMutation({
@@ -111,14 +134,35 @@ export function PaginaClinicaPage() {
     meta: { skipErrorToast: true },
   });
 
+  const saving =
+    layout.isPending ||
+    salvarHero.isPending ||
+    salvarIdentidade.isPending ||
+    salvarEndereco.isPending ||
+    salvarContato.isPending ||
+    doacao.isPending ||
+    visibilidade.isPending ||
+    arquivo.isPending;
+
+  const blocosDisponiveis = useMemo(() => SECTION_CATALOG.filter((item) => item.categoria === "blocos"), []);
+  const estruturaPlanejada = useMemo(() => SECTION_CATALOG.filter((item) => item.categoria === "estrutura"), []);
+
   if (pagina.isError && !draft) {
     return (
-      <ErrorState
-        message={pagina.error instanceof HttpError ? pagina.error.message : "Não foi possível abrir o construtor da página."}
-      />
+      <div className="p-6">
+        <ErrorState
+          message={pagina.error instanceof HttpError ? pagina.error.message : "Não foi possível abrir o construtor da página."}
+        />
+      </div>
     );
   }
-  if (pagina.isLoading || !draft) return <LoadingState label="Abrindo o construtor da página…" />;
+  if (pagina.isLoading || !draft) {
+    return (
+      <div className="flex min-h-[50vh] items-center justify-center p-6">
+        <LoadingState label="Abrindo o construtor da página…" />
+      </div>
+    );
+  }
 
   const page = draft;
   const previewDraft: PageEditor = {
@@ -150,6 +194,7 @@ export function PaginaClinicaPage() {
 
   const abrirSecao = (tipo: string) => {
     setAtual(tipo);
+    setPropsOpen(true);
     requestAnimationFrame(() => scrollPreview(tipo));
   };
 
@@ -169,6 +214,23 @@ export function PaginaClinicaPage() {
     const secoes = page.secoes.map((item) => (item.tipo === secao.tipo ? { ...item, visivel: !item.visivel } : item));
     setDraft({ ...page, secoes });
     layout.mutate(secoes);
+  };
+
+  const adicionarBloco = (tipo: string, disponivel: boolean) => {
+    if (!disponivel) {
+      toast.push("Este bloco entra em breve no construtor.");
+      return;
+    }
+    const secao = page.secoes.find((item) => item.tipo === tipo);
+    if (!secao) {
+      toast.push("Seção indisponível nesta clínica.");
+      return;
+    }
+    if (!secao.visivel) {
+      alternar(secao);
+    }
+    abrirSecao(tipo);
+    setLeftTab("estrutura");
   };
 
   const onPick = (destino: "logo" | "hero" | "galeria", file: File, previewUrl: string) => {
@@ -279,93 +341,222 @@ export function PaginaClinicaPage() {
   };
 
   return (
-    <div className="space-y-4">
-      <PageHeader
-        hideArt
-        eyebrow="Presença"
-        title="Construtor da página"
-        description="Edite à esquerda e veja a página pública à direita, em tempo real. A imagem no preview aparece na hora."
-        actions={
-          page.identidade.slug ? (
-            <Button href={`/clinica/${page.identidade.slug}`} target="_blank" rel="noreferrer">
-              Abrir página pública
-            </Button>
-          ) : null
-        }
-      />
-
-      <div className="grid grid-cols-1 items-start gap-4 pb-8 lg:grid-cols-[minmax(18rem,26rem)_minmax(0,1fr)]">
-        <div className="order-2 grid min-w-0 content-start gap-4 lg:order-1 lg:pr-1">
-          <Surface className="p-3">
-            <p className="px-2 text-xs font-semibold tracking-wide text-muted uppercase">Seções</p>
-            <ul className="mt-2">
-              {page.secoes.map((secao, index) => (
-                <li key={secao.tipo}>
-                  <div className={`flex items-center gap-1 rounded-xl px-2 py-2 ${atual === secao.tipo ? "bg-brand-soft" : ""}`}>
-                    <button type="button" className="min-w-0 flex-1 text-left" onClick={() => abrirSecao(secao.tipo)}>
-                      <p className="truncate text-sm font-medium">{LABELS[secao.tipo] ?? secao.tipo}</p>
-                      <p className="text-[11px] text-muted">{secao.visivel ? "Visível" : "Oculta"}</p>
-                    </button>
-                    <button type="button" className="px-1 text-xs text-muted disabled:opacity-50" disabled={layout.isPending} onClick={() => mover(index, -1)} aria-label="Subir">
-                      ↑
-                    </button>
-                    <button type="button" className="px-1 text-xs text-muted disabled:opacity-50" disabled={layout.isPending} onClick={() => mover(index, 1)} aria-label="Descer">
-                      ↓
-                    </button>
-                    <button type="button" className="px-1 text-xs font-semibold text-brand disabled:opacity-50" disabled={layout.isPending} onClick={() => alternar(secao)}>
-                      {layout.isPending ? "Salvando…" : secao.visivel ? "Ocultar" : "Exibir"}
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </Surface>
-
-          <EditorBlock
-            tipo={atual}
-            draft={page}
-            setDraft={setDraft}
-            campanha={campanha}
-            setCampanha={setCampanha}
-            onHero={onHero}
-            onSobre={onSobre}
-            onEndereco={onEndereco}
-            onContato={onContato}
-            onDoacao={onDoacao}
-            onPick={onPick}
-            onToggle={toggleItem}
-            pending={
-              salvarHero.isPending ||
-              salvarIdentidade.isPending ||
-              salvarEndereco.isPending ||
-              salvarContato.isPending ||
-              doacao.isPending ||
-              visibilidade.isPending
-            }
-          />
+    <div className="flex min-h-0 flex-1 flex-col bg-[#f7f5fb]">
+      <header className="flex flex-wrap items-center gap-3 border-b border-[#ebe4f4] bg-white px-4 py-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-[11px] font-semibold tracking-[0.16em] text-brand uppercase">Page builder</p>
+          <h1 className="truncate text-lg font-semibold text-ink">Página pública · {page.identidade.nome}</h1>
         </div>
+        <div className="flex items-center gap-1 rounded-lg border border-line bg-[#faf8fc] p-1">
+          {(
+            [
+              ["desktop", Monitor],
+              ["tablet", Tablet],
+              ["mobile", Smartphone],
+            ] as const
+          ).map(([id, Icon]) => (
+            <button
+              key={id}
+              type="button"
+              title={id}
+              onClick={() => setViewport(id)}
+              className={`inline-flex size-8 items-center justify-center rounded-md ${
+                viewport === id ? "bg-brand text-white" : "text-muted hover:bg-white hover:text-ink"
+              }`}
+            >
+              <Icon className="size-4" />
+            </button>
+          ))}
+        </div>
+        <p className="text-xs text-muted">{saving ? "Salvando…" : "Salve cada bloco no painel direito"}</p>
+        {page.identidade.slug ? (
+          <Button href={`/clinica/${page.identidade.slug}`} target="_blank" rel="noreferrer" variant="secondary" className="!rounded-lg !px-3 !py-2 text-xs">
+            <ExternalLink className="size-3.5" />
+            Visualizar
+          </Button>
+        ) : null}
+      </header>
 
-        <Surface className="order-1 flex min-h-[22rem] flex-col overflow-hidden p-0 lg:sticky lg:top-20 lg:order-2 lg:max-h-[calc(100svh-8rem)]">
-          <div className="flex items-center gap-2 border-b border-line px-4 py-3">
-            <span className="size-2 rounded-full bg-rose-300" />
-            <span className="size-2 rounded-full bg-amber-300" />
-            <span className="size-2 rounded-full bg-emerald-300" />
-            <p className="min-w-0 flex-1 truncate rounded-full bg-[#f7f5fb] px-3 py-1 text-xs text-muted">
-              /clinica/{page.identidade.slug || "…"} · preview ao vivo
-            </p>
+      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[240px_minmax(0,1fr)_minmax(280px,340px)]">
+        <aside className="flex min-h-0 flex-col border-b border-[#ebe4f4] bg-white lg:border-r lg:border-b-0">
+          <div className="flex border-b border-line">
+            <button
+              type="button"
+              className={`flex-1 px-3 py-2.5 text-xs font-semibold ${leftTab === "estrutura" ? "border-b-2 border-brand text-brand" : "text-muted"}`}
+              onClick={() => setLeftTab("estrutura")}
+            >
+              Estrutura
+            </button>
+            <button
+              type="button"
+              className={`flex-1 px-3 py-2.5 text-xs font-semibold ${leftTab === "blocos" ? "border-b-2 border-brand text-brand" : "text-muted"}`}
+              onClick={() => setLeftTab("blocos")}
+            >
+              Blocos
+            </button>
           </div>
-          <div ref={previewRef} data-page-preview className="min-h-0 flex-1 overflow-auto bg-white">
-            <ClinicaPublicaView
-              data={editorToPublic({ ...previewDraft, hero: ensureHero(previewDraft) })}
-              preview
-              highlight={atual}
+          <div className="min-h-0 flex-1 overflow-y-auto p-3">
+            {leftTab === "estrutura" ? (
+              <ul className="space-y-1">
+                {page.secoes.map((secao, index) => {
+                  const active = atual === secao.tipo;
+                  return (
+                    <li key={secao.tipo}>
+                      <div
+                        className={`group flex items-center gap-1 rounded-lg border px-2 py-1.5 transition ${
+                          active ? "border-brand/40 bg-brand-soft" : "border-transparent hover:border-line hover:bg-[#faf8fc]"
+                        }`}
+                      >
+                        <button type="button" className="min-w-0 flex-1 text-left" onClick={() => abrirSecao(secao.tipo)}>
+                          <p className="truncate text-sm font-medium text-ink">{LABELS[secao.tipo] ?? secao.tipo}</p>
+                          <p className="text-[10px] text-muted">{secao.visivel ? "Visível na página" : "Oculta"}</p>
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded p-1 text-muted opacity-70 hover:bg-white hover:opacity-100 disabled:opacity-30"
+                          disabled={layout.isPending || index === 0}
+                          onClick={() => mover(index, -1)}
+                          aria-label="Subir"
+                        >
+                          <ChevronUp className="size-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded p-1 text-muted opacity-70 hover:bg-white hover:opacity-100 disabled:opacity-30"
+                          disabled={layout.isPending || index === page.secoes.length - 1}
+                          onClick={() => mover(index, 1)}
+                          aria-label="Descer"
+                        >
+                          <ChevronDown className="size-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded p-1 text-muted opacity-70 hover:bg-white hover:opacity-100 disabled:opacity-30"
+                          disabled={layout.isPending}
+                          onClick={() => alternar(secao)}
+                          aria-label={secao.visivel ? "Ocultar" : "Exibir"}
+                          title={secao.visivel ? "Ocultar" : "Exibir"}
+                        >
+                          {secao.visivel ? <Eye className="size-3.5" /> : <EyeOff className="size-3.5" />}
+                        </button>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <div className="space-y-4">
+                <div>
+                  <p className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold tracking-wide text-muted uppercase">
+                    <Layers className="size-3.5" />
+                    Blocos prontos
+                  </p>
+                  <ul className="space-y-1.5">
+                    {blocosDisponiveis.map((item) => (
+                      <li key={item.tipo}>
+                        <button
+                          type="button"
+                          onClick={() => adicionarBloco(item.tipo, item.disponivel)}
+                          className={`w-full rounded-lg border px-3 py-2.5 text-left transition ${
+                            item.disponivel
+                              ? "border-line bg-white hover:border-brand/40 hover:bg-brand-soft/40"
+                              : "border-dashed border-line bg-[#faf8fc] opacity-70"
+                          }`}
+                        >
+                          <p className="text-sm font-medium text-ink">{item.label}</p>
+                          <p className="mt-0.5 text-[11px] leading-snug text-muted">
+                            {item.disponivel ? item.descricao : `${item.descricao} · em breve`}
+                          </p>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <div>
+                  <p className="mb-2 text-[11px] font-semibold tracking-wide text-muted uppercase">Estrutura</p>
+                  <ul className="space-y-1.5">
+                    {estruturaPlanejada.map((item) => (
+                      <li key={item.tipo}>
+                        <button
+                          type="button"
+                          onClick={() => adicionarBloco(item.tipo, item.disponivel)}
+                          className="w-full rounded-lg border border-dashed border-line bg-[#faf8fc] px-3 py-2.5 text-left opacity-70"
+                        >
+                          <p className="text-sm font-medium text-ink">{item.label}</p>
+                          <p className="mt-0.5 text-[11px] text-muted">{item.descricao} · em breve</p>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            )}
+          </div>
+        </aside>
+
+        <section className="flex min-h-0 min-w-0 flex-col bg-[#efeaf6]">
+          <div className="flex items-center justify-between gap-2 border-b border-[#ebe4f4] bg-white/80 px-4 py-2 text-xs text-muted backdrop-blur">
+            <span className="truncate">/clinica/{page.identidade.slug || "…"}</span>
+            <span className="hidden sm:inline">Selecione uma seção à esquerda · preview ao vivo</span>
+          </div>
+          <div ref={previewRef} className="min-h-0 flex-1 overflow-auto p-4 sm:p-6">
+            <div
+              className="mx-auto overflow-hidden rounded-xl border border-[#e4dcef] bg-white shadow-[0_12px_40px_-24px_rgba(80,40,140,0.35)] transition-[max-width] duration-200"
+              style={{ maxWidth: VIEWPORT_WIDTH[viewport] }}
+            >
+              <ClinicaPublicaView
+                data={editorToPublic({ ...previewDraft, hero: ensureHero(previewDraft) })}
+                preview
+                highlight={atual}
+              />
+            </div>
+          </div>
+        </section>
+
+        <aside className="flex min-h-0 flex-col border-t border-[#ebe4f4] bg-white lg:border-t-0 lg:border-l">
+          <div className="flex items-center justify-between gap-2 border-b border-line px-3 py-2.5">
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold tracking-wide text-muted uppercase">Propriedades</p>
+              <p className="truncate text-sm font-semibold text-ink">{LABELS[atual] ?? atual}</p>
+            </div>
+            <button
+              type="button"
+              className="rounded-md px-2 py-1 text-xs font-medium text-muted hover:bg-[#faf8fc] lg:hidden"
+              onClick={() => setPropsOpen((v) => !v)}
+            >
+              {propsOpen ? "Recolher" : "Abrir"}
+            </button>
+          </div>
+          <div className={`min-h-0 flex-1 overflow-y-auto p-3 ${propsOpen ? "" : "hidden lg:block"}`}>
+            <EditorBlock
+              tipo={atual}
+              draft={page}
+              setDraft={setDraft}
+              campanha={campanha}
+              setCampanha={setCampanha}
+              onHero={onHero}
+              onSobre={onSobre}
+              onEndereco={onEndereco}
+              onContato={onContato}
+              onDoacao={onDoacao}
+              onPick={onPick}
+              onToggle={toggleItem}
+              pending={
+                salvarHero.isPending ||
+                salvarIdentidade.isPending ||
+                salvarEndereco.isPending ||
+                salvarContato.isPending ||
+                doacao.isPending ||
+                visibilidade.isPending
+              }
             />
           </div>
-        </Surface>
+        </aside>
       </div>
     </div>
   );
 }
+
 
 function EditorBlock({
   tipo,

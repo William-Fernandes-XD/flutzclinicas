@@ -9,10 +9,16 @@
   --color-ink: #2d3748;
   --color-muted: #4a5568;
   --color-line: #e2e8f0;
+  --color-canvas: #ffffff;
+  --color-surface: #ffffff;
+  --color-accent: #f4e9ff;
   --color-success: #2f855a;
   --color-danger: #c53030;
   --color-warning: #c05621;
   --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.625rem;
 }
 
 *,

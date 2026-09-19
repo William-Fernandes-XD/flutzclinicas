@@ -25,7 +25,9 @@ public class ClinicCatalogService {
     private static final Set<String> ICONES_SERVICO = Set.of(
             "consulta", "retorno", "vacinacao", "cirurgia", "emergencia", "exame", "banho",
             "internacao", "ultrassom", "raiox", "castracao", "checkup", "microchip", "curativo",
-            "medicacao", "geral"
+            "medicacao", "laboratorio", "odontologia", "dermatologia", "cardiologia", "oftalmologia",
+            "fisioterapia", "hotel", "domicilio", "nutricao", "acupuntura", "comportamento",
+            "geriatria", "neonatal", "preventivo", "geral"
     );
 
     private final JdbcTemplate jdbc;

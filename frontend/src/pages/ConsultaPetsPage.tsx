@@ -85,8 +85,12 @@ export function ConsultaPetsPage() {
       if (payload.foto) {
         try {
           await uploadPerfilFoto({ alvo: "pet", arquivo: payload.foto, petId: pet.id });
-        } catch {
-          /* pet já cadastrado */
+        } catch (err) {
+          toast.push(
+            err instanceof Error
+              ? `Pet cadastrado, mas a foto não foi salva: ${err.message}`
+              : "Pet cadastrado, mas a foto não foi salva. Edite o pet e envie de novo.",
+          );
         }
       }
       return pet;

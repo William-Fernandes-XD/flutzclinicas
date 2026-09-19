@@ -1383,7 +1383,11 @@ public class ClinicOpsService {
         return value == null || value.isBlank() ? null : value.trim();
     }
 
-    /** Exibe no máximo os dois primeiros nomes do remetente no chat. */
+    /**
+     * Exibe o primeiro nome + o próximo nome significativo (ignora partículas:
+     * da, de, do, das, dos, e, di…).
+     * Ex.: "Yan da Silva" → "Yan Silva"; "Maria Clara Souza" → "Maria Clara".
+     */
     private static String doisPrimeirosNomes(String nomeCompleto) {
         if (nomeCompleto == null || nomeCompleto.isBlank()) {
             return null;
@@ -1392,7 +1396,20 @@ public class ClinicOpsService {
         if (partes.length == 1) {
             return partes[0];
         }
-        return partes[0] + " " + partes[1];
+        String primeiro = partes[0];
+        for (int i = 1; i < partes.length; i++) {
+            if (!particulaNome(partes[i])) {
+                return primeiro + " " + partes[i];
+            }
+        }
+        return primeiro;
+    }
+
+    private static boolean particulaNome(String parte) {
+        String p = parte == null ? "" : parte.toLowerCase(java.util.Locale.ROOT);
+        return p.equals("da") || p.equals("de") || p.equals("do") || p.equals("das")
+                || p.equals("dos") || p.equals("e") || p.equals("di") || p.equals("du")
+                || p.equals("del") || p.equals("della") || p.equals("van") || p.equals("von");
     }
 
     public record ClinicaContexto(
