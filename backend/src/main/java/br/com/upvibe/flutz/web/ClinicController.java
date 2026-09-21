@@ -124,4 +124,10 @@ public class ClinicController {
         return clinic.concluirAtendimento(id);
     }
 
+    @PostMapping("/walk-in")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ClinicService.WalkInResult registrarWalkIn(@RequestBody ClinicService.WalkInRequest request) {
+        return clinic.registrarWalkIn(request);
+    }
+
 }

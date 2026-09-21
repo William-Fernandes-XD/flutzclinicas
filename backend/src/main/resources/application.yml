@@ -93,3 +93,6 @@ flutz:
     public-key: ${MERCADOPAGO_PUBLIC_KEY:}
     access-token: ${MERCADOPAGO_ACCESS_TOKEN:}
     webhook-secret: ${MERCADOPAGO_WEBHOOK_SECRET:}
+    client-id: ${MERCADOPAGO_CLIENT_ID:}
+    client-secret: ${MERCADOPAGO_CLIENT_SECRET:}
+    redirect-uri: ${MERCADOPAGO_REDIRECT_URI:${APP_URL:http://localhost:8080}/api/public/mercadopago/oauth/callback}

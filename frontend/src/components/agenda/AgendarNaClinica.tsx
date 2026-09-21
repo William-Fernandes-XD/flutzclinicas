@@ -61,6 +61,7 @@ export function AgendarNaClinica({
   const [tipo, setTipo] = useState<"ATENDIMENTO" | "VACINACAO">(saved?.tipo ?? "ATENDIMENTO");
   const [petId, setPetId] = useState("");
   const [alvoId, setAlvoId] = useState("");
+  const [sabeVacina, setSabeVacina] = useState<"sim" | "nao" | "">("");
   const [cursor, setCursor] = useState(() => {
     const base = saved?.dia ? new Date(`${saved.dia}T12:00:00`) : new Date();
     return new Date(base.getFullYear(), base.getMonth(), 1);
@@ -184,6 +185,16 @@ export function AgendarNaClinica({
     if (!petId || !slot) {
       setErro("Escolha o pet e um horário livre.");
       return;
+    }
+    if (tipo === "VACINACAO") {
+      if (sabeVacina !== "sim") {
+        setErro('Para agendar vacinação, escolha “Sim, sei qual vacina” e selecione a vacina.');
+        return;
+      }
+      if (!alvoId) {
+        setErro("Selecione a vacina desejada.");
+        return;
+      }
     }
     const escolhidoSlot = livres.find((item) => item.inicio === slot);
     if (!escolhidoSlot) {
@@ -321,6 +332,7 @@ export function AgendarNaClinica({
                     onChange={(event) => {
                       setTipo(event.target.value as "ATENDIMENTO" | "VACINACAO");
                       setAlvoId("");
+                      setSabeVacina("");
                     }}
                   >
                     <option value="ATENDIMENTO">Atendimento</option>
@@ -362,26 +374,97 @@ export function AgendarNaClinica({
                     </Select>
                   </Field>
                 ) : (
-                  <Field
-                    label="Vacina"
-                    hint={
-                      vacinas.isLoading
-                        ? "Carregando vacinas…"
-                        : vacinas.data?.length
-                          ? undefined
-                          : "Esta clínica ainda não liberou vacinas para agendar."
-                    }
-                  >
-                    <Select value={alvoId} onChange={(event) => setAlvoId(event.target.value)} required>
-                      <option value="">{vacinas.isLoading ? "Carregando…" : "Selecione"}</option>
-                      {(vacinas.data ?? []).map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {item.nome}
-                          {item.fabricante ? ` · ${item.fabricante}` : ""}
-                        </option>
-                      ))}
-                    </Select>
-                  </Field>
+                  <div className="space-y-3">
+                    <div>
+                      <p className="text-sm font-medium text-ink">Você já sabe qual vacina aplicar?</p>
+                      <div className="mt-2 grid gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSabeVacina("sim");
+                            setAlvoId("");
+                          }}
+                          className={`rounded-2xl px-3 py-2.5 text-left text-sm font-semibold ring-1 transition ${
+                            sabeVacina === "sim"
+                              ? "bg-brand text-white ring-brand"
+                              : "bg-white text-ink ring-brand/15 hover:bg-brand-soft"
+                          }`}
+                        >
+                          Sim, sei qual vacina
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSabeVacina("nao");
+                            setAlvoId("");
+                          }}
+                          className={`rounded-2xl px-3 py-2.5 text-left text-sm font-semibold ring-1 transition ${
+                            sabeVacina === "nao"
+                              ? "bg-brand text-white ring-brand"
+                              : "bg-white text-ink ring-brand/15 hover:bg-brand-soft"
+                          }`}
+                        >
+                          Não sei, preciso de orientação
+                        </button>
+                      </div>
+                    </div>
+                    {sabeVacina === "sim" ? (
+                      <Field
+                        label="Vacina"
+                        hint={
+                          vacinas.isLoading
+                            ? "Carregando vacinas…"
+                            : vacinas.data?.length
+                              ? "Só aparecem vacinas com preço definido pela clínica."
+                              : "Esta clínica ainda não liberou vacinas para agendar."
+                        }
+                      >
+                        <Select value={alvoId} onChange={(event) => setAlvoId(event.target.value)} required>
+                          <option value="">{vacinas.isLoading ? "Carregando…" : "Selecione"}</option>
+                          {(vacinas.data ?? []).map((item) => (
+                            <option key={item.id} value={item.id}>
+                              {item.nome}
+                              {item.fabricante ? ` · ${item.fabricante}` : ""}
+                              {item.preco != null ? ` · R$ ${Number(item.preco).toFixed(2)}` : ""}
+                            </option>
+                          ))}
+                        </Select>
+                      </Field>
+                    ) : null}
+                    {sabeVacina === "nao" ? (
+                      <div className="space-y-2 rounded-2xl bg-brand-soft/60 p-3">
+                        <p className="text-xs leading-relaxed text-muted">
+                          Sem problema. Vamos abrir o chat da clínica com uma mensagem pronta para você revisar e enviar.
+                        </p>
+                        <Button
+                          type="button"
+                          className="w-full"
+                          disabled={!petId || !empresaId}
+                          onClick={() => {
+                            const pet = (pets.data ?? []).find((item) => String(item.id) === petId);
+                            const petNome = pet?.nome?.trim() || "meu pet";
+                            const draft =
+                              `Olá! Gostaria de vacinar meu pet ${petNome}, mas não sei qual vacina ele precisa. ` +
+                              "Poderiam me orientar e informar como posso realizar o atendimento?";
+                            void (async () => {
+                              try {
+                                const conv = await api.abrirTutorChat(empresaId!);
+                                navigate(`/cliente/chat?chatId=${conv.chatId}`, { state: { draft } });
+                              } catch (err) {
+                                setErro(
+                                  err instanceof HttpError
+                                    ? err.message
+                                    : "Não foi possível abrir o chat da clínica.",
+                                );
+                              }
+                            })();
+                          }}
+                        >
+                          Falar com a clínica no chat
+                        </Button>
+                      </div>
+                    ) : null}
+                  </div>
                 )}
                 <p className="rounded-2xl bg-brand-soft/60 px-3 py-2 text-xs text-muted">
                   Profissional: qualquer da equipe (a clínica define na confirmação).
@@ -444,16 +527,22 @@ export function AgendarNaClinica({
               <p className="mt-4 text-sm text-muted">O pedido de horário na página pública é feito pela conta do tutor.</p>
             ) : null}
 
-            <Button
-              className="mt-6 w-full rounded-2xl"
-              size="lg"
-              onClick={confirmar}
-              busy={criar.isPending}
-              busyLabel="Confirmando…"
-            >
-              <CalendarDays className="size-4" />
-              Confirmar horário
-            </Button>
+            {tipo === "VACINACAO" && sabeVacina === "nao" ? (
+              <p className="mt-6 rounded-2xl bg-white/80 px-4 py-3 text-sm text-muted ring-1 ring-brand/10">
+                Use o botão “Falar com a clínica no chat” nos detalhes à esquerda. O agendamento com pagamento fica para quando a vacina estiver definida.
+              </p>
+            ) : (
+              <Button
+                className="mt-6 w-full rounded-2xl"
+                size="lg"
+                onClick={confirmar}
+                busy={criar.isPending}
+                busyLabel="Confirmando…"
+              >
+                <CalendarDays className="size-4" />
+                Confirmar horário
+              </Button>
+            )}
           </div>
         </div>
       </div>

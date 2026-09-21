@@ -27,7 +27,7 @@ export function LandingPage() {
           <PageContainer>
             <CTA
               title="Comece pelo lado que é o seu"
-              description="Tutor cria a conta e encontra clínicas. Clínica assina o plano mensal do Flutz no cadastro."
+              description="Tutor cria a conta e encontra clínicas. Clínica começa com 14 dias gratuitos para testar o Flutz."
               actionLabel="Criar conta de tutor"
               to="/cadastro?tipo=tutor"
             >

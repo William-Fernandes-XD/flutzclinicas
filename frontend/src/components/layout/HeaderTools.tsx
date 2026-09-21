@@ -170,6 +170,8 @@ export function HeaderTools({ variant }: { variant: "platform" | "clinic" | "cli
 
   // Polling: atualiza badge e toca o som quando a contagem sobe
   const naoLidasTotal = naoLidas.data?.total ?? 0;
+  const seenIdsRef = useRef<Set<number>>(new Set());
+  const bootstrappedRef = useRef(false);
   useEffect(() => {
     if (!notesEnabled || naoLidas.isLoading || naoLidas.data == null) return;
     const prev = prevNaoLidasRef.current;
@@ -179,11 +181,30 @@ export function HeaderTools({ variant }: { variant: "platform" | "clinic" | "cli
     }
     if (naoLidasTotal > prev) {
       playNotifSound();
-      const delta = naoLidasTotal - prev;
-      toast.push(delta === 1 ? "Nova notificação" : `${delta} novas notificações`);
     }
     prevNaoLidasRef.current = naoLidasTotal;
-  }, [naoLidasTotal, naoLidas.isLoading, naoLidas.data, notesEnabled, toast]);
+  }, [naoLidasTotal, naoLidas.isLoading, naoLidas.data, notesEnabled]);
+
+  useEffect(() => {
+    if (!notesEnabled || notificacoes.isLoading || !notificacoes.data) return;
+    const listaAtual = notificacoes.data;
+    if (!bootstrappedRef.current) {
+      seenIdsRef.current = new Set(listaAtual.map((item) => item.id));
+      bootstrappedRef.current = true;
+      return;
+    }
+    const novas = listaAtual.filter((item) => !seenIdsRef.current.has(item.id) && !item.lida);
+    for (const item of novas.slice(0, 3).reverse()) {
+      toast.push(item.titulo || "Nova notificação", {
+        detail: item.corpo,
+        fotoUrl: item.fotoUrl,
+        atorNome: item.atorNome,
+      });
+    }
+    for (const item of listaAtual) {
+      seenIdsRef.current.add(item.id);
+    }
+  }, [notificacoes.data, notificacoes.isLoading, notesEnabled, toast]);
 
   const marcar = useMutation({
     mutationFn: (id: number) => api.marcarNotificacaoLida(id),

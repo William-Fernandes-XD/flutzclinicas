@@ -4,7 +4,6 @@ import { MarketingLayout } from "./components/layout/MarketingLayout";
 import { RequireAuth } from "./components/RequireAuth";
 import { RequireClinic } from "./components/RequireClinic";
 import { RequireTipo } from "./components/RequireTipo";
-import { AdminAssinaturasPage } from "./pages/admin/AdminAssinaturasPage";
 import { AdminAvaliacoesPage } from "./pages/admin/AdminAvaliacoesPage";
 import { AdminCatalogosPage } from "./pages/admin/AdminCatalogosPage";
 import { AdminClinicasPage } from "./pages/admin/AdminClinicasPage";
@@ -74,7 +73,7 @@ export default function App() {
         <Route index element={<AdminDashboardPage />} />
         <Route path="clinicas" element={<AdminClinicasPage />} />
         <Route path="clinicas/:id" element={<AdminEnterClinicPage />} />
-        <Route path="assinaturas" element={<AdminAssinaturasPage />} />
+        <Route path="assinaturas" element={<Navigate to="/admin/faturamento" replace />} />
         <Route path="faturamento" element={<AdminFaturamentoPage />} />
         <Route path="tokens" element={<AdminTokensPage />} />
         <Route path="usuarios" element={<AdminUsuariosPage />} />

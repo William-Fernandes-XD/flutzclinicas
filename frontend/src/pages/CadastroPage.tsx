@@ -1,9 +1,9 @@
 import { Building2, PawPrint } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { PaymentModal } from "../components/PaymentModal";
 import { PageContainer } from "../components/layout/PageContainer";
 import { Button } from "../components/ui/Button";
+import { Modal } from "../components/ui/Modal";
 import { PhotoFileField } from "../components/ui/PhotoFileField";
 import { http, HttpError } from "../lib/http";
 import { fileFromForm, uploadPerfilFoto } from "../lib/perfil-foto";
@@ -11,7 +11,7 @@ import { isPlanId } from "../lib/plans";
 import { UFS } from "../lib/ufs";
 import { homeFor, type Session } from "../lib/session";
 import { useAuth } from "../providers/AuthProvider";
-import { api } from "../services/api";
+import { api, type Mensalidade } from "../services/api";
 
 export function CadastroPage() {
   const [params] = useSearchParams();
@@ -36,7 +36,7 @@ export function CadastroPage() {
     <PageContainer className="max-w-3xl py-12 sm:py-16">
       <h1 className="text-3xl font-bold text-ink dark:text-white">Como você quer entrar no Flutz?</h1>
       <p className="mt-2 text-sm text-muted">
-        Tutores criam a conta de graça. Clínicas assinam o plano mensal da plataforma neste cadastro.
+        Tutores criam a conta de graça. Clínicas começam com um período de testes e depois assinam o plano mensal.
       </p>
       <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Link
@@ -56,7 +56,7 @@ export function CadastroPage() {
           <Building2 className="size-8 text-brand" aria-hidden="true" />
           <h2 className="mt-4 text-xl font-semibold text-ink dark:text-white">Sou uma clínica</h2>
           <p className="mt-2 text-sm leading-relaxed text-muted">
-            Cadastre a empresa e assine o plano mensal do Flutz (R$ 149,90).
+            Cadastre a empresa e teste o Flutz por 14 dias antes da cobrança da assinatura.
           </p>
         </Link>
       </div>
@@ -75,13 +75,17 @@ function TutorSignup() {
   const { refresh } = useAuth();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [historicoOpen, setHistoricoOpen] = useState(false);
+  const [pendingForm, setPendingForm] = useState<FormData | null>(null);
+  const [historicoInfo, setHistoricoInfo] = useState<{
+    qtdPets: number;
+    qtdAtendimentos: number;
+    qtdVacinas: number;
+  } | null>(null);
 
-  async function onSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (loading) return;
-    const data = new FormData(event.currentTarget);
-    setError("");
+  async function concluirCadastro(data: FormData) {
     setLoading(true);
+    setError("");
     try {
       const session = await http<Session>("/api/public/cadastro-tutor", {
         method: "POST",
@@ -99,7 +103,6 @@ function TutorSignup() {
         try {
           await uploadPerfilFoto({ alvo: "tutor", arquivo: foto });
         } catch (err) {
-          /* cadastro ok; foto pode falhar (Drive/tamanho) — avisar */
           console.warn("Foto de perfil não enviada no cadastro", err);
         }
       }
@@ -107,6 +110,35 @@ function TutorSignup() {
     } catch (err) {
       setError(err instanceof HttpError ? err.message : "Não foi possível concluir o cadastro.");
     } finally {
+      setLoading(false);
+      setHistoricoOpen(false);
+      setPendingForm(null);
+    }
+  }
+
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (loading) return;
+    const data = new FormData(event.currentTarget);
+    setError("");
+    setLoading(true);
+    try {
+      const cpf = String(data.get("cpf") || "");
+      const hist = await api.cadastroTutorHistorico(cpf);
+      if (hist.temHistorico) {
+        setHistoricoInfo({
+          qtdPets: hist.qtdPets,
+          qtdAtendimentos: hist.qtdAtendimentos,
+          qtdVacinas: hist.qtdVacinas,
+        });
+        setPendingForm(data);
+        setHistoricoOpen(true);
+        setLoading(false);
+        return;
+      }
+      await concluirCadastro(data);
+    } catch (err) {
+      setError(err instanceof HttpError ? err.message : "Não foi possível concluir o cadastro.");
       setLoading(false);
     }
   }
@@ -142,6 +174,53 @@ function TutorSignup() {
           Sou uma clínica
         </Link>
       </p>
+
+      <Modal
+        open={historicoOpen}
+        title="Histórico encontrado"
+        onClose={() => {
+          if (loading) return;
+          setHistoricoOpen(false);
+          setPendingForm(null);
+        }}
+        footer={
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={loading}
+              onClick={() => {
+                setHistoricoOpen(false);
+                setPendingForm(null);
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              busy={loading}
+              busyLabel="Criando…"
+              onClick={() => {
+                if (pendingForm) void concluirCadastro(pendingForm);
+              }}
+            >
+              Trazer para minha conta
+            </Button>
+          </div>
+        }
+      >
+        <p className="text-sm leading-relaxed text-ink dark:text-zinc-100">
+          Você ainda não possui cadastro, mas há atendimentos realizados com o seu CPF. Gostaria de trazer essas
+          informações para sua conta?
+        </p>
+        {historicoInfo ? (
+          <ul className="mt-4 space-y-1 text-sm text-muted">
+            <li>Pets: {historicoInfo.qtdPets}</li>
+            <li>Atendimentos: {historicoInfo.qtdAtendimentos}</li>
+            <li>Vacinas: {historicoInfo.qtdVacinas}</li>
+          </ul>
+        ) : null}
+      </Modal>
     </PageContainer>
   );
 }
@@ -151,31 +230,9 @@ function ClinicSignup({ plan }: { plan: string }) {
   const { refresh } = useAuth();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [token, setToken] = useState("");
-  const [tokenHint, setTokenHint] = useState("");
-  const [tokenPreview, setTokenPreview] = useState("");
-  const [payOpen, setPayOpen] = useState(false);
+  const [trialOpen, setTrialOpen] = useState(false);
   const [created, setCreated] = useState<Session | null>(null);
-  const [payerCpf, setPayerCpf] = useState("");
-
-  async function conferirToken(codigo: string) {
-    const valor = codigo.trim();
-    if (!valor) {
-      setTokenHint("");
-      setTokenPreview("");
-      return;
-    }
-    try {
-      const preview = await api.validarToken(valor, plan.toUpperCase());
-      setTokenHint("");
-      setTokenPreview(
-        `Token ${preview.codigo}: ${formatPercent(preview.percentualDesconto)} de desconto. De ${formatMoney(preview.valorBruto)} para ${formatMoney(preview.valor)}.`,
-      );
-    } catch (err) {
-      setTokenPreview("");
-      setTokenHint(err instanceof HttpError ? err.message : "Token inválido ou expirado");
-    }
-  }
+  const [trialInfo, setTrialInfo] = useState<{ valor: number; vencimento: string | null } | null>(null);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -201,7 +258,7 @@ function ClinicSignup({ plan }: { plan: string }) {
           emailResponsavel: data.get("emailResponsavel"),
           telefoneResponsavel: data.get("telefoneResponsavel"),
           senha: data.get("senha"),
-          codigoToken: token.trim() || null,
+          codigoToken: null,
         },
       });
       await refresh();
@@ -214,24 +271,23 @@ function ClinicSignup({ plan }: { plan: string }) {
         }
       }
 
-      // Se o token zerar a fatura, o backend já marca como paga — segue para o app.
-      // Caso contrário, abre o mesmo checkout de mensalidade (token + PIX/cartão).
-      let precisaPagar = true;
+      let mensalidade: Mensalidade | null = null;
       try {
-        const fatura = await api.mensalidade();
-        precisaPagar = Boolean(fatura.faturaId) && Number(fatura.valor ?? fatura.valorAPagar ?? 0) > 0;
+        mensalidade = await api.mensalidade();
       } catch {
-        precisaPagar = true;
+        /* ainda mostramos o modal com fallback */
       }
-
-      if (!precisaPagar) {
-        navigate(homeFor(session), { replace: true });
-        return;
-      }
+      const valor =
+        Number(mensalidade?.valorAPagar ?? mensalidade?.valor ?? mensalidade?.valorMensal ?? 149.9) || 149.9;
+      const vencimento =
+        mensalidade?.proximoVencimento ??
+        mensalidade?.vencimentoFatura ??
+        mensalidade?.dataLimiteAcesso ??
+        null;
 
       setCreated(session);
-      setPayerCpf(String(data.get("cpfResponsavel") ?? ""));
-      setPayOpen(true);
+      setTrialInfo({ valor, vencimento });
+      setTrialOpen(true);
     } catch (err) {
       setError(err instanceof HttpError ? err.message : "Não foi possível concluir o cadastro.");
     } finally {
@@ -239,19 +295,18 @@ function ClinicSignup({ plan }: { plan: string }) {
     }
   }
 
+  function entrarNoPainel() {
+    setTrialOpen(false);
+    if (created) {
+      navigate(homeFor(created), { replace: true });
+    }
+  }
+
   return (
     <PageContainer className="max-w-3xl py-12 sm:py-16">
-      {payOpen && created ? (
-        <PaymentModal
-          initialCpf={payerCpf}
-          onPaid={() => navigate(homeFor(created), { replace: true })}
-          onClose={() => navigate("/app/assinatura/pagar", { replace: true })}
-        />
-      ) : null}
       <h1 className="text-3xl font-bold text-ink dark:text-white">Cadastro da clínica</h1>
       <p className="mt-2 text-sm text-muted">
-        Plano mensal Flutz (R$ 149,90). Após criar a conta, você aplica token (se tiver) e paga a primeira fatura com PIX
-        ou cartão.
+        Crie a conta da empresa e comece com 14 dias gratuitos para testar o Flutz.
       </p>
       <form onSubmit={onSubmit} className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Field name="nomeEmpresa" label="Nome da clínica" required className="sm:col-span-2" />
@@ -284,31 +339,60 @@ function ClinicSignup({ plan }: { plan: string }) {
         <Field name="emailResponsavel" label="E-mail de acesso" type="email" required />
         <Field name="telefoneResponsavel" label="Telefone do responsável" />
         <Field name="senha" label="Senha" type="password" required className="sm:col-span-2" minLength={8} />
-        <label className="sm:col-span-2 block text-sm font-medium">
-          Token de desconto (opcional)
-          <input
-            name="codigoToken"
-            value={token}
-            onChange={(event) => {
-              setToken(event.target.value);
-              setTokenHint("");
-              setTokenPreview("");
-            }}
-            onBlur={() => conferirToken(token)}
-            autoComplete="off"
-            placeholder="Se você tiver um cupom, informe aqui"
-            className="mt-1 w-full rounded-xl border border-line px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
-          />
-        </label>
-        {tokenPreview ? <p className="sm:col-span-2 text-sm text-brand">{tokenPreview}</p> : null}
-        {tokenHint ? <p className="sm:col-span-2 text-sm text-danger">{tokenHint}</p> : null}
         {error ? <p className="sm:col-span-2 text-sm text-danger">{error}</p> : null}
         <div className="sm:col-span-2">
           <Button type="submit" busy={loading} busyLabel="Criando…">
-            Criar clínica e pagar
+            Criar conta
           </Button>
         </div>
       </form>
+
+      <Modal
+        open={trialOpen}
+        onClose={entrarNoPainel}
+        title="Bem-vindo ao Flutz"
+        footer={
+          <div className="flex justify-end">
+            <Button type="button" onClick={entrarNoPainel}>
+              Começar a explorar
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-5">
+          <div className="flex justify-center">
+            <img
+              src="/login-pets.png"
+              alt=""
+              className="h-36 w-auto max-w-full object-contain sm:h-44"
+              draggable={false}
+            />
+          </div>
+          <div className="space-y-3 text-center">
+            <p className="text-base font-semibold text-ink dark:text-white">
+              Você ganhou 14 dias gratuitos para testar o sistema
+            </p>
+            <p className="text-sm leading-relaxed text-muted">
+              Aproveite o período de avaliação com acesso completo. Depois disso, o sistema fica bloqueado até o
+              pagamento de{" "}
+              <span className="font-semibold text-ink dark:text-zinc-100">
+                {formatMoney(trialInfo?.valor ?? 149.9)}
+              </span>{" "}
+              da assinatura, a partir de{" "}
+              <span className="font-semibold text-ink dark:text-zinc-100">
+                {formatDateBr(trialInfo?.vencimento)}
+              </span>
+              .
+            </p>
+          </div>
+          <div className="rounded-2xl border border-brand/20 bg-brand-soft/60 px-4 py-3 text-center dark:border-brand/30 dark:bg-brand/10">
+            <p className="text-xs font-medium uppercase tracking-wide text-brand">Período de testes</p>
+            <p className="mt-1 text-sm text-ink dark:text-zinc-200">
+              14 dias · cobrança a partir de {formatDateBr(trialInfo?.vencimento)}
+            </p>
+          </div>
+        </div>
+      </Modal>
     </PageContainer>
   );
 }
@@ -319,10 +403,12 @@ function formatMoney(value: number | string): string {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(amount);
 }
 
-function formatPercent(value: number | string): string {
-  const amount = typeof value === "number" ? value : Number(value);
-  if (!Number.isFinite(amount)) return String(value);
-  return `${new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(amount)}%`;
+function formatDateBr(iso: string | null | undefined) {
+  if (!iso) return "—";
+  const raw = iso.slice(0, 10);
+  const [y, m, d] = raw.split("-");
+  if (!y || !m || !d) return iso;
+  return `${d}/${m}/${y}`;
 }
 
 function Field({

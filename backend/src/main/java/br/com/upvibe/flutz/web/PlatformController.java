@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -61,6 +62,47 @@ public class PlatformController {
         return platform.faturas();
     }
 
+    @GetMapping("/faturamento/resumo")
+    public PlatformService.FaturamentoResumo faturamentoResumo() {
+        return platform.faturamentoResumo();
+    }
+
+    @GetMapping("/faturamento/empresas")
+    public List<PlatformService.FaturamentoEmpresaCard> faturamentoEmpresas(
+            @RequestParam String status
+    ) {
+        return platform.faturamentoEmpresasPorStatus(status);
+    }
+
+    @PostMapping("/faturamento/empresas/{id}/pagamento-manual")
+    public PlatformService.FaturamentoEmpresaCard pagamentoManual(@PathVariable Integer id) {
+        return platform.marcarPagamentoManual(id);
+    }
+
+    @GetMapping("/faturamento/top-vinculo")
+    public List<PlatformService.Ponto> topVinculo() {
+        return platform.topEmpresasVinculo();
+    }
+
+    @GetMapping("/faturamento/top-rendimento")
+    public List<PlatformService.Ponto> topRendimento() {
+        return platform.topEmpresasRendimento();
+    }
+
+    @GetMapping("/faturamento/empresas-page")
+    public PlatformService.PaginaFaturamentoEmpresas faturamentoEmpresasPage(
+            @RequestParam(required = false) String q,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "15") int size
+    ) {
+        return platform.faturamentoEmpresasPage(q, page, size);
+    }
+
+    @GetMapping("/faturamento/empresas/{id}/detalhes")
+    public List<PlatformService.FaturamentoMovimento> faturamentoDetalhes(@PathVariable Integer id) {
+        return platform.faturamentoEmpresaDetalhes(id);
+    }
+
     @GetMapping("/usuarios")
     public PlatformService.UsuariosAdmin usuarios() {
         return platform.usuarios();
@@ -106,6 +148,21 @@ public class PlatformController {
             @RequestBody NovoItem body
     ) {
         return platform.criarCatalogo(tipo, body.nome(), body.especieId());
+    }
+
+    @PutMapping("/catalogos/{tipo}/{id}")
+    public PlatformService.Item atualizar(
+            @PathVariable String tipo,
+            @PathVariable Integer id,
+            @RequestBody NovoItem body
+    ) {
+        return platform.atualizarCatalogo(tipo, id, body == null ? null : body.nome());
+    }
+
+    @DeleteMapping("/catalogos/{tipo}/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void remover(@PathVariable String tipo, @PathVariable Integer id) {
+        platform.removerCatalogo(tipo, id);
     }
 
     @GetMapping("/tokens")

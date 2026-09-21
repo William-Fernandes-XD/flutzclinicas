@@ -14,6 +14,7 @@ import {
   type SpeciesIconId,
 } from "../../lib/species-icons";
 import { useToast } from "../../providers/ToastProvider";
+import { api } from "../../services/api";
 
 const TIPOS = [
   { id: "especies", label: "Espécies" },
@@ -192,7 +193,95 @@ export function ClinicCatalogosPage() {
     setError("");
   };
 
+  const ofertaVacina = useMutation({
+    mutationFn: ({ id, oferecer }: { id: number; oferecer: boolean }) => api.ofertaVacinaClinica(id, oferecer),
+    onSuccess: (_data, vars) => {
+      toast.push(vars.oferecer ? "Vacina ativada na clínica." : "Vacina removida da oferta da clínica.");
+      invalidar();
+    },
+  });
+
   const busySugestao = adicionarSugestao.isPending || adicionarTodas.isPending;
+
+  if (tipo === "vacinas") {
+    const oferecidas = (lista.data ?? []).filter((item) => item.daClinica).length;
+    return (
+      <div>
+        <PageHeader
+          eyebrow="Clínica"
+          title="Catálogos da clínica"
+          description="Vacinas vêm do catálogo Flutz. Ative as que sua clínica oferece e defina o preço em Vacinação."
+        />
+        <div className="mb-5 flex min-w-0 flex-wrap gap-2">
+          {TIPOS.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => setTipo(item.id)}
+              className={`rounded-full px-3 py-1.5 text-xs font-semibold ${tipo === item.id ? "bg-brand text-white" : "bg-white ring-1 ring-line dark:bg-zinc-900"}`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+        <p className="mb-4 text-sm text-muted">
+          {lista.isLoading
+            ? "Carregando catálogo…"
+            : `${oferecidas} de ${(lista.data ?? []).length} vacinas ativas nesta clínica.`}
+        </p>
+        {error ? <ErrorState message={error} /> : null}
+        {!lista.data?.length && !lista.isLoading ? (
+          <EmptyState
+            title="Nenhuma vacina no catálogo"
+            description="Peça ao administrador Flutz para cadastrar vacinas em Admin → Catálogos."
+          />
+        ) : (
+          <ul className="living-card divide-y divide-line dark:divide-zinc-800">
+            {(lista.data ?? []).map((item) => (
+              <li key={item.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                <div className="min-w-0">
+                  <p className="font-medium text-[#1f1630]">{item.nome}</p>
+                  <p className="text-xs text-muted">{item.daClinica ? "Oferecida pela clínica" : "Não oferecida"}</p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={!!item.daClinica}
+                  disabled={ofertaVacina.isPending}
+                  onClick={() => {
+                    setError("");
+                    ofertaVacina.mutate(
+                      { id: item.id, oferecer: !item.daClinica },
+                      {
+                        onError: (err) =>
+                          setError(err instanceof HttpError ? err.message : "Não foi possível atualizar."),
+                      },
+                    );
+                  }}
+                  className={`relative h-8 w-14 rounded-full transition ${
+                    item.daClinica ? "bg-[#7828c8]" : "bg-[#d8cce8]"
+                  } disabled:opacity-50`}
+                >
+                  <span
+                    className={`absolute top-1 size-6 rounded-full bg-white shadow transition ${
+                      item.daClinica ? "left-7" : "left-1"
+                    }`}
+                  />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className="mt-4 text-sm text-muted">
+          Depois de ativar, defina o preço em{" "}
+          <a href="/app/vacinacao" className="font-semibold text-brand hover:underline">
+            Vacinação
+          </a>
+          .
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div>

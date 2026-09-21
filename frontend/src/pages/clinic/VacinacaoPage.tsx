@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { PetPhoto } from "../../components/clinic/PanelHero";
+import { WalkInRegistroModal } from "../../components/clinic/WalkInRegistroModal";
 import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
 import { EmptyState, ErrorState, LoadingState } from "../../components/ui/EmptyState";
@@ -93,6 +94,7 @@ function groupByPet(rows: VaccinationRow[]): PetVacinaGroup[] {
 export function VacinacaoPage() {
   const queryClient = useQueryClient();
   const [error, setError] = useState("");
+  const [walkInOpen, setWalkInOpen] = useState(false);
   const lista = useQuery({ queryKey: ["vacinacoes"], queryFn: api.vaccinations });
   const pets = useQuery({ queryKey: ["pets"], queryFn: () => http<Pet[]>("/api/pets") });
   const vacinas = useQuery({ queryKey: ["vacinas"], queryFn: () => http<Item[]>("/api/catalogos/vacinas") });
@@ -185,8 +187,22 @@ export function VacinacaoPage() {
         eyebrow="Saúde"
         title="Vacinação"
         description="Registre as doses aplicadas. Cadastre vacinas novas em Catálogos da clínica."
+        actions={
+          <Button type="button" variant="secondary" onClick={() => setWalkInOpen(true)}>
+            Vacina sem cadastro
+          </Button>
+        }
       />
       <PrecosVacinasAgenda />
+      <WalkInRegistroModal
+        open={walkInOpen}
+        tipoFixo="VACINACAO"
+        onClose={() => setWalkInOpen(false)}
+        onSuccess={() => {
+          void queryClient.invalidateQueries({ queryKey: ["vacinacoes"] });
+          void queryClient.invalidateQueries({ queryKey: ["pets"] });
+        }}
+      />
       <form onSubmit={onSubmit} className="living-card grid grid-cols-1 gap-3 p-5 sm:grid-cols-2">
         <select name="petId" required className="rounded-xl border border-line px-3 py-2 dark:border-zinc-700 dark:bg-zinc-950">
           <option value="">Pet</option>
@@ -458,9 +474,9 @@ function PrecosVacinasAgenda() {
       ) : null}
       {!gestao.isLoading && !(gestao.data ?? []).length ? (
         <p className="text-sm text-muted">
-          Nenhuma vacina oferecida ainda. Cadastre em{" "}
+          Nenhuma vacina oferecida ainda. Ative as vacinas do catálogo Flutz em{" "}
           <Link to="/app/catalogos" className="font-medium text-brand hover:underline">
-            Catálogos
+            Catálogos → Vacinas
           </Link>
           .
         </p>

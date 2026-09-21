@@ -18,6 +18,24 @@ export const api = {
   subscriptions: (status?: string) =>
     http<AdminSubscription[]>(`/api/admin/assinaturas${status ? `?status=${status}` : ""}`),
   invoices: () => http<AdminInvoice[]>("/api/admin/faturas"),
+  faturamentoResumo: () => http<FaturamentoResumo>("/api/admin/faturamento/resumo"),
+  faturamentoEmpresas: (status: "PAGA" | "PENDENTE" | "ATRASADA") =>
+    http<FaturamentoEmpresaCard[]>(`/api/admin/faturamento/empresas?status=${status}`),
+  faturamentoPagamentoManual: (empresaId: number) =>
+    http<FaturamentoEmpresaCard>(`/api/admin/faturamento/empresas/${empresaId}/pagamento-manual`, {
+      method: "POST",
+    }),
+  faturamentoTopVinculo: () => http<Point[]>("/api/admin/faturamento/top-vinculo"),
+  faturamentoTopRendimento: () => http<Point[]>("/api/admin/faturamento/top-rendimento"),
+  faturamentoEmpresasPage: (q?: string, page = 0, size = 15) => {
+    const query = new URLSearchParams();
+    if (q) query.set("q", q);
+    query.set("page", String(page));
+    query.set("size", String(size));
+    return http<PaginaFaturamentoEmpresas>(`/api/admin/faturamento/empresas-page?${query}`);
+  },
+  faturamentoEmpresaDetalhes: (empresaId: number) =>
+    http<FaturamentoMovimento[]>(`/api/admin/faturamento/empresas/${empresaId}/detalhes`),
   users: () => http<AdminUsers>("/api/admin/usuarios"),
   supportTickets: () => http<SupportTicket[]>("/api/admin/tickets"),
   atualizarStatusTicket: (id: number, status: string) =>
@@ -56,6 +74,15 @@ export const api = {
     http<void>(`/api/admin/avaliacoes/${id}`, { method: "DELETE" }),
   createCatalog: (tipo: string, nome: string, especieId?: number) =>
     http<CatalogItem>(`/api/admin/catalogos/${tipo}`, { method: "POST", json: { nome, especieId } }),
+  updateCatalog: (tipo: string, id: number, nome: string) =>
+    http<CatalogItem>(`/api/admin/catalogos/${tipo}/${id}`, { method: "PUT", json: { nome } }),
+  deleteCatalog: (tipo: string, id: number) =>
+    http<void>(`/api/admin/catalogos/${tipo}/${id}`, { method: "DELETE" }),
+  ofertaVacinaClinica: (id: number, oferecer: boolean) =>
+    http<CatalogItem>(`/api/clinica/catalogos/vacinas/${id}/oferta`, {
+      method: "POST",
+      json: { oferecer },
+    }),
   adminTokens: (page = 0, size = 10) =>
     http<AdminTokenPage>(`/api/admin/tokens?page=${page}&size=${size}`),
   createToken: (body: NovoToken) =>
@@ -104,6 +131,12 @@ export const api = {
   tutorVaccinations: () => http<VaccinationRow[]>("/api/tutor/vacinacoes"),
   createVaccination: (body: Record<string, unknown>) =>
     http<VaccinationRow>("/api/vacinacoes", { method: "POST", json: body }),
+  registrarWalkIn: (body: WalkInBody) =>
+    http<WalkInResult>("/api/walk-in", { method: "POST", json: body }),
+  cadastroTutorHistorico: (cpf: string) =>
+    http<CadastroTutorHistorico>(
+      `/api/public/cadastro-tutor/historico?cpf=${encodeURIComponent(cpf.replace(/\D/g, ""))}`,
+    ),
   specialties: () => http<CatalogItem[]>("/api/especialidades"),
   offerSpecialty: (id: number) => http<CatalogItem>("/api/especialidades", { method: "POST", json: { id } }),
   pageConfig: () => http<PageEditor>("/api/pagina"),
@@ -213,8 +246,8 @@ export const api = {
   agendaPrecoVacina: (id: number, preco: number) =>
     http<VacinaGestao>(`/api/agenda/vacinas/${id}/preco`, { method: "POST", json: { preco } }),
   clinicaRecebimento: () => http<ContaRecebimento>("/api/clinica/recebimento"),
-  salvarClinicaRecebimento: (body: { publicKey: string; accessToken: string; nomeExibicao?: string }) =>
-    http<ContaRecebimento>("/api/clinica/recebimento", { method: "POST", json: body }),
+  conectarMercadoPago: () =>
+    http<{ authorizationUrl: string; expiresAt: string }>("/api/clinica/recebimento/mercadopago/connect"),
   desconectarClinicaRecebimento: () =>
     http<ContaRecebimento>("/api/clinica/recebimento/desconectar", { method: "POST" }),
   clinicaRecebimentos: () => http<RecebimentoClinica[]>("/api/clinica/recebimentos"),
@@ -415,6 +448,9 @@ export type ContaRecebimento = {
   nomeExibicao: string | null;
   conectadaEm: string | null;
   conectada: boolean;
+  authMode?: string | null;
+  providerUserId?: string | null;
+  oauthDisponivel?: boolean;
 };
 
 export type RecebimentoClinica = {
@@ -463,6 +499,54 @@ export type AdminInvoice = {
   status: string;
   vencimento: string;
   pagamento: string | null;
+};
+
+export type FaturamentoResumo = {
+  pagoMes: number;
+  pendente: number;
+  atrasado: number;
+  empresasPagoMes: number;
+  empresasPendente: number;
+  empresasAtrasado: number;
+};
+
+export type FaturamentoEmpresaCard = {
+  empresaId: number;
+  nome: string;
+  telefone: string | null;
+  email: string | null;
+  logoUrl: string | null;
+  statusAssinatura: string | null;
+  total: number;
+};
+
+export type FaturamentoEmpresaLinha = {
+  empresaId: number;
+  nome: string;
+  email: string | null;
+  telefone: string | null;
+  logoUrl: string | null;
+  statusAssinatura: string | null;
+  lucroMes: number;
+  lucroAno: number;
+};
+
+export type PaginaFaturamentoEmpresas = {
+  items: FaturamentoEmpresaLinha[];
+  total: number;
+  page: number;
+  size: number;
+};
+
+export type FaturamentoMovimento = {
+  id: number;
+  categoria: string;
+  descricao: string;
+  pet: string | null;
+  tutor: string | null;
+  valor: number;
+  pagoEm: string | null;
+  status: string;
 };
 
 export type AdminUsers = {
@@ -670,6 +754,47 @@ export type VaccinationRow = {
   aplicacao: string;
   proxima: string | null;
   lote: string | null;
+};
+
+export type WalkInBody = {
+  tipo: "ATENDIMENTO" | "VACINACAO";
+  cpf: string;
+  nomeTutor: string;
+  telefone?: string;
+  email?: string;
+  nomePet: string;
+  especieId: number;
+  racaId?: number;
+  sexo?: string;
+  peso?: number;
+  dataAniversario?: string;
+  servicoId?: number;
+  resumo?: string;
+  detalhes?: string;
+  data?: string;
+  vacinaId?: number;
+  dataAplicacao?: string;
+  dataProximaDose?: string;
+  lote?: string;
+  observacoes?: string;
+};
+
+export type WalkInResult = {
+  clienteId: number;
+  provisorio: boolean;
+  petId: number;
+  pet: string;
+  tutor: string;
+  tipo: string;
+  atendimentoId: number | null;
+  vacinacaoId: number | null;
+};
+
+export type CadastroTutorHistorico = {
+  temHistorico: boolean;
+  qtdPets: number;
+  qtdAtendimentos: number;
+  qtdVacinas: number;
 };
 
 export type PageSection = { tipo: string; ordem: number; visivel: boolean };

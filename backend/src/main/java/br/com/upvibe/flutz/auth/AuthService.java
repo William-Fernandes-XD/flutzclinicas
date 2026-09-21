@@ -222,7 +222,7 @@ public class AuthService {
         assinatura.setPlano(plano);
         assinatura.setStatusAssinatura("TRIAL");
         assinatura.setDataInicio(LocalDate.now());
-        assinatura.setDataProximoVencimento(LocalDate.now().plusDays(30));
+        assinatura.setDataProximoVencimento(LocalDate.now().plusDays(14));
         assinaturas.save(assinatura);
         entityManager.flush();
         criarSecoesPadrao(empresa.getId(), plano.isPermiteDoacoes());
@@ -230,7 +230,7 @@ public class AuthService {
                 assinatura.getId(),
                 empresa.getId(),
                 plano.getValorMensal(),
-                LocalDate.now().plusDays(30),
+                LocalDate.now().plusDays(14),
                 req.codigoToken()
         );
 
@@ -250,10 +250,34 @@ public class AuthService {
         if (req.senha() == null || req.senha().length() < 8) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A senha precisa ter pelo menos 8 caracteres");
         }
-        if (clientes.existsByCpf(cpf)) {
-            throw new ResponseStatusException(
-                    HttpStatus.CONFLICT,
-                    "Já existe cadastro com este CPF. Entre com CPF e senha."
+
+        Cliente existente = clientes.findByCpf(cpf).orElse(null);
+        if (existente != null) {
+            if (existente.isCadastroCompleto()) {
+                throw new ResponseStatusException(
+                        HttpStatus.CONFLICT,
+                        "Já existe cadastro com este CPF. Entre com CPF e senha."
+                );
+            }
+            // Claim do histórico walk-in
+            existente.setNomeCliente(req.nome().trim());
+            existente.setSenhaHash(passwords.encode(req.senha()));
+            existente.setCadastroCompleto(true);
+            if (blankToNull(req.email()) != null) {
+                existente.setEmail(blankToNull(req.email()));
+            }
+            if (blankToNull(req.telefone()) != null) {
+                existente.setTelefone(blankToNull(req.telefone()));
+            }
+            existente.setStatus(ativo);
+            clientes.save(existente);
+            return new AuthPrincipal(
+                    AtorTipo.CLIENTE,
+                    existente.getId(),
+                    null,
+                    existente.getNomeCliente(),
+                    existente.getCpf(),
+                    List.of("tutor")
             );
         }
 
@@ -261,6 +285,7 @@ public class AuthService {
         cliente.setNomeCliente(req.nome().trim());
         cliente.setCpf(cpf);
         cliente.setSenhaHash(passwords.encode(req.senha()));
+        cliente.setCadastroCompleto(true);
         cliente.setEmail(blankToNull(req.email()));
         cliente.setTelefone(blankToNull(req.telefone()));
         cliente.setPermitirNotificacoes(true);
@@ -275,6 +300,35 @@ public class AuthService {
                 cliente.getCpf(),
                 List.of("tutor")
         );
+    }
+
+    public HistoricoWalkIn historicoWalkInPorCpf(String cpfBruto) {
+        String cpf = onlyDigits(cpfBruto);
+        if (cpf.length() != 11) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "CPF inválido");
+        }
+        return clientes.findByCpf(cpf)
+                .filter(c -> !c.isCadastroCompleto())
+                .map(c -> {
+                    Integer id = c.getId();
+                    long pets = count("SELECT COUNT(*) FROM flutz.pet WHERE cliente_id = ?", id);
+                    long atendimentos = count("SELECT COUNT(*) FROM flutz.atendimento WHERE cliente_id = ?", id);
+                    long vacinas = count(
+                            """
+                            SELECT COUNT(*) FROM flutz.historico_vacinacao h
+                            JOIN flutz.pet p ON p.pet_id = h.pet_id
+                            WHERE p.cliente_id = ?
+                            """,
+                            id
+                    );
+                    return new HistoricoWalkIn(true, pets, atendimentos, vacinas);
+                })
+                .orElse(new HistoricoWalkIn(false, 0, 0, 0));
+    }
+
+    private long count(String sql, Object... args) {
+        Long n = jdbc.queryForObject(sql, Long.class, args);
+        return n == null ? 0 : n;
     }
 
     private void criarSecoesPadrao(Integer empresaId, boolean permiteDoacoes) {
@@ -328,6 +382,8 @@ public class AuthService {
     private AuthPrincipal loginCliente(String cpf, String senha) {
         return clientes.findByCpf(cpf)
                 .filter(Cliente::ativo)
+                .filter(Cliente::isCadastroCompleto)
+                .filter(cliente -> cliente.getSenhaHash() != null && !cliente.getSenhaHash().isBlank())
                 .filter(cliente -> passwords.matches(senha, cliente.getSenhaHash()))
                 .map(cliente -> new AuthPrincipal(
                         AtorTipo.CLIENTE,
@@ -467,6 +523,14 @@ public class AuthService {
             String email,
             String telefone,
             String senha
+    ) {
+    }
+
+    public record HistoricoWalkIn(
+            boolean temHistorico,
+            long qtdPets,
+            long qtdAtendimentos,
+            long qtdVacinas
     ) {
     }
 

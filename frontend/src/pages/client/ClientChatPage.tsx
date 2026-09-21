@@ -1,21 +1,30 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { MessageSquare, Search, SendHorizontal } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { Avatar } from "../../components/ui/Avatar";
 import { Button } from "../../components/ui/Button";
 import { EmptyState, LoadingState } from "../../components/ui/EmptyState";
 import { Select } from "../../components/ui/Field";
 import { api, type TutorConversa } from "../../services/api";
 
+type ChatLocationState = { draft?: string; empresaId?: number };
+
 export function ClientChatPage() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const chatParam = searchParams.get("chatId");
+  const empresaParam = searchParams.get("empresaId");
+  const draftQuery = searchParams.get("draft");
+  const locationState = (location.state as ChatLocationState | null) ?? null;
   const [selecionada, setSelecionada] = useState<TutorConversa | null>(null);
   const [busca, setBusca] = useState("");
   const [texto, setTexto] = useState("");
   const [novaAberta, setNovaAberta] = useState(false);
+  const draftAppliedRef = useRef(false);
+  const abrirEmpresaRef = useRef<number | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   const conversas = useQuery({ queryKey: ["tutor-chats"], queryFn: api.tutorChats, refetchInterval: 8000 });
@@ -77,6 +86,30 @@ export function ClientChatPage() {
     const encontrada = conversas.data.find((item) => item.chatId === id);
     if (encontrada) setSelecionada(encontrada);
   }, [chatParam, conversas.data]);
+
+  useEffect(() => {
+    const empresaId = locationState?.empresaId ?? (empresaParam ? Number(empresaParam) : NaN);
+    if (!Number.isFinite(empresaId) || abrir.isPending) return;
+    if (selecionada?.empresaId === empresaId) return;
+    if (abrirEmpresaRef.current === empresaId) return;
+    const existente = (conversas.data ?? []).find((item) => item.empresaId === empresaId);
+    if (existente?.chatId) {
+      setSelecionada(existente);
+      return;
+    }
+    if (conversas.isLoading) return;
+    abrirEmpresaRef.current = empresaId;
+    abrir.mutate(empresaId);
+  }, [abrir, conversas.data, conversas.isLoading, empresaParam, locationState?.empresaId, selecionada?.empresaId]);
+
+  useEffect(() => {
+    if (draftAppliedRef.current) return;
+    const draft = locationState?.draft ?? (draftQuery ? decodeURIComponent(draftQuery) : "");
+    if (!draft.trim()) return;
+    setTexto(draft);
+    draftAppliedRef.current = true;
+    navigate(location.pathname + location.search, { replace: true, state: null });
+  }, [draftQuery, location.pathname, location.search, locationState?.draft, navigate]);
 
   useEffect(() => {
     if (!selecionada) return;

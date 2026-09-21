@@ -7,8 +7,11 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -22,18 +25,35 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import br.com.upvibe.flutz.clinic.NotificationService;
 import br.com.upvibe.flutz.security.AuthHolder;
 import br.com.upvibe.flutz.security.AuthPrincipal;
+import jakarta.annotation.PreDestroy;
 
 @RestController
 @RequestMapping("/api/notificacoes")
 public class NotificationController {
 
+    private static final Logger log = LoggerFactory.getLogger(NotificationController.class);
+
     private static final long SSE_TIMEOUT_MS = 30L * 60L * 1000L;
     private static final long SSE_POLL_SECONDS = 4L;
 
     private final NotificationService notifications;
+    /** Scheduler compartilhado — evita criar uma thread por conexão SSE. */
+    private final ScheduledExecutorService sseScheduler = Executors.newScheduledThreadPool(
+            2,
+            r -> {
+                Thread t = new Thread(r, "notif-sse");
+                t.setDaemon(true);
+                return t;
+            }
+    );
 
     public NotificationController(NotificationService notifications) {
         this.notifications = notifications;
+    }
+
+    @PreDestroy
+    void shutdownSse() {
+        sseScheduler.shutdownNow();
     }
 
     @GetMapping
@@ -52,8 +72,11 @@ public class NotificationController {
      */
     @GetMapping(path = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter stream() {
-        AuthPrincipal auth = AuthHolder.current();
-        if (auth == null || (!auth.tutor() && !auth.colaborador() && !auth.adminPlataforma())) {
+        AuthPrincipal auth = AuthHolder.optional();
+        if (auth == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Sessão ausente");
+        }
+        if (!auth.tutor() && !auth.colaborador() && !auth.adminPlataforma()) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Sem permissão");
         }
         Integer destId = auth.atorId();
@@ -63,14 +86,13 @@ public class NotificationController {
         String destTipo = notifications.destinatarioTipoPublico(auth);
 
         SseEmitter emitter = new SseEmitter(SSE_TIMEOUT_MS);
-        ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor(r -> {
-            Thread t = new Thread(r, "notif-sse-" + destTipo + "-" + destId);
-            t.setDaemon(true);
-            return t;
-        });
         AtomicLong ultimo = new AtomicLong(-1);
+        AtomicBoolean closed = new AtomicBoolean(false);
 
-        ScheduledFuture<?> future = executor.scheduleAtFixedRate(() -> {
+        ScheduledFuture<?> future = sseScheduler.scheduleAtFixedRate(() -> {
+            if (closed.get()) {
+                return;
+            }
             try {
                 long total = notifications.contarNaoLidas(destTipo, destId);
                 if (total != ultimo.get()) {
@@ -82,24 +104,41 @@ public class NotificationController {
                     emitter.send(SseEmitter.event().comment("ping"));
                 }
             } catch (IOException ex) {
-                emitter.completeWithError(ex);
+                // Cliente desconectou — encerra sem propagar para o DispatcherServlet.
+                closeQuietly(emitter, closed);
             } catch (Exception ex) {
-                emitter.completeWithError(ex);
+                log.debug("SSE notificações: falha ao emitir para {}/{}: {}", destTipo, destId, ex.getMessage());
+                closeQuietly(emitter, closed);
             }
         }, 0, SSE_POLL_SECONDS, TimeUnit.SECONDS);
 
         Runnable shutdown = () -> {
-            future.cancel(true);
-            executor.shutdownNow();
+            closed.set(true);
+            future.cancel(false);
         };
         emitter.onCompletion(shutdown);
         emitter.onTimeout(() -> {
             shutdown.run();
-            emitter.complete();
+            try {
+                emitter.complete();
+            } catch (Exception ignored) {
+                /* already closed */
+            }
         });
         emitter.onError(ex -> shutdown.run());
 
         return emitter;
+    }
+
+    private static void closeQuietly(SseEmitter emitter, AtomicBoolean closed) {
+        if (!closed.compareAndSet(false, true)) {
+            return;
+        }
+        try {
+            emitter.complete();
+        } catch (Exception ignored) {
+            /* already closed */
+        }
     }
 
     @PostMapping("/{id}/lida")

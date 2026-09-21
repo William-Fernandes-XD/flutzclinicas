@@ -579,7 +579,12 @@ public class PlatformService {
                     (rs, i) -> new Item(rs.getInt("id"), rs.getString("nome"))
             );
             case "vacinas" -> jdbc.query(
-                    "SELECT vacina_id AS id, nome_vacina AS nome FROM flutz.vacina ORDER BY nome_vacina",
+                    """
+                    SELECT vacina_id AS id, nome_vacina AS nome
+                    FROM flutz.vacina
+                    WHERE empresa_id IS NULL
+                    ORDER BY nome_vacina
+                    """,
                     (rs, i) -> new Item(rs.getInt("id"), rs.getString("nome"))
             );
             case "doencas" -> jdbc.query(
@@ -620,12 +625,467 @@ public class PlatformService {
                         valor, status
                 );
             }
+            case "vacinas" -> insertReturning(
+                    """
+                    INSERT INTO flutz.vacina (nome_vacina, descricao, fabricante, empresa_id)
+                    VALUES (?, NULL, NULL, NULL)
+                    RETURNING vacina_id
+                    """,
+                    valor
+            );
             default -> throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
-                    "Espécies, raças, vacinas, doenças, especialidades e tipos de serviço são cadastrados pela clínica."
+                    "Espécies, raças, doenças, especialidades e tipos de serviço são cadastrados pela clínica. Vacinas e motivos de chat pela plataforma."
             );
         };
         return new Item(id, valor);
+    }
+
+    @Transactional
+    public Item atualizarCatalogo(String tipo, Integer id, String nome) {
+        exigirAdmin();
+        if (id == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Informe o item");
+        }
+        if (nome == null || nome.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Informe o nome");
+        }
+        String valor = nome.trim();
+        int updated = switch (tipo) {
+            case "vacinas" -> jdbc.update(
+                    "UPDATE flutz.vacina SET nome_vacina = ? WHERE vacina_id = ? AND empresa_id IS NULL",
+                    valor, id
+            );
+            case "chat-motivos" -> jdbc.update(
+                    "UPDATE flutz.chat_motivo SET descricao = ? WHERE chat_motivo_id = ?",
+                    valor, id
+            );
+            default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Catálogo não editável por este endpoint");
+        };
+        if (updated == 0) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Item não encontrado");
+        }
+        return new Item(id, valor);
+    }
+
+    @Transactional
+    public void removerCatalogo(String tipo, Integer id) {
+        exigirAdmin();
+        if (id == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Informe o item");
+        }
+        try {
+            int removed = switch (tipo) {
+                case "vacinas" -> jdbc.update(
+                        "DELETE FROM flutz.vacina WHERE vacina_id = ? AND empresa_id IS NULL",
+                        id
+                );
+                case "chat-motivos" -> jdbc.update(
+                        "DELETE FROM flutz.chat_motivo WHERE chat_motivo_id = ?",
+                        id
+                );
+                default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Catálogo não removível por este endpoint");
+            };
+            if (removed == 0) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Item não encontrado");
+            }
+        } catch (ResponseStatusException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Este item está em uso (histórico, ofertas de clínicas etc.) e não pode ser removido."
+            );
+        }
+    }
+
+    public FaturamentoResumo faturamentoResumo() {
+        exigirAdmin();
+        BigDecimal pagoMes = nvl(jdbc.queryForObject(
+                """
+                SELECT COALESCE(SUM(valor), 0)
+                FROM flutz.fatura_assinatura
+                WHERE status_fatura = 'PAGA'
+                  AND data_pagamento IS NOT NULL
+                  AND data_pagamento::date >= date_trunc('month', CURRENT_DATE)::date
+                """,
+                BigDecimal.class
+        ));
+        BigDecimal pendente = nvl(jdbc.queryForObject(
+                """
+                SELECT COALESCE(SUM(valor), 0)
+                FROM flutz.fatura_assinatura
+                WHERE status_fatura = 'PENDENTE'
+                  AND valor > 0
+                  AND data_vencimento IS NOT NULL
+                  AND data_vencimento::date >= CURRENT_DATE
+                  AND data_vencimento::date <= (CURRENT_DATE + INTERVAL '5 days')
+                """,
+                BigDecimal.class
+        ));
+        BigDecimal atrasado = nvl(jdbc.queryForObject(
+                """
+                SELECT COALESCE(SUM(valor), 0)
+                FROM flutz.fatura_assinatura
+                WHERE status_fatura = 'ATRASADA'
+                   OR (
+                     status_fatura = 'PENDENTE'
+                     AND valor > 0
+                     AND data_vencimento IS NOT NULL
+                     AND data_vencimento::date < CURRENT_DATE
+                   )
+                """,
+                BigDecimal.class
+        ));
+        long qtdPago = count(
+                """
+                SELECT COUNT(DISTINCT empresa_id)
+                FROM flutz.fatura_assinatura
+                WHERE status_fatura = 'PAGA'
+                  AND data_pagamento IS NOT NULL
+                  AND data_pagamento::date >= date_trunc('month', CURRENT_DATE)::date
+                """
+        );
+        long qtdPendente = count(
+                """
+                SELECT COUNT(DISTINCT empresa_id)
+                FROM flutz.fatura_assinatura
+                WHERE status_fatura = 'PENDENTE'
+                  AND valor > 0
+                  AND data_vencimento IS NOT NULL
+                  AND data_vencimento::date >= CURRENT_DATE
+                  AND data_vencimento::date <= (CURRENT_DATE + INTERVAL '5 days')
+                """
+        );
+        long qtdAtrasado = count(
+                """
+                SELECT COUNT(DISTINCT empresa_id)
+                FROM flutz.fatura_assinatura
+                WHERE status_fatura = 'ATRASADA'
+                   OR (
+                     status_fatura = 'PENDENTE'
+                     AND valor > 0
+                     AND data_vencimento IS NOT NULL
+                     AND data_vencimento::date < CURRENT_DATE
+                   )
+                """
+        );
+        return new FaturamentoResumo(pagoMes, pendente, atrasado, qtdPago, qtdPendente, qtdAtrasado);
+    }
+
+    public List<FaturamentoEmpresaCard> faturamentoEmpresasPorStatus(String statusFatura) {
+        exigirAdmin();
+        String status = statusFatura == null ? "" : statusFatura.trim().toUpperCase(Locale.ROOT);
+        if (!List.of("PAGA", "PENDENTE", "ATRASADA").contains(status)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Status inválido");
+        }
+        if ("PAGA".equals(status)) {
+            return jdbc.query(
+                    """
+                    SELECT e.empresa_id, e.nome_empresa, e.telefone, e.email, e.logo_url,
+                           a.status_assinatura,
+                           COALESCE(SUM(f.valor), 0) AS total
+                    FROM flutz.empresa e
+                    JOIN flutz.fatura_assinatura f ON f.empresa_id = e.empresa_id
+                    LEFT JOIN LATERAL (
+                        SELECT status_assinatura FROM flutz.assinatura x
+                        WHERE x.empresa_id = e.empresa_id
+                        ORDER BY x.assinatura_id DESC LIMIT 1
+                    ) a ON TRUE
+                    WHERE f.status_fatura = 'PAGA'
+                      AND f.data_pagamento IS NOT NULL
+                      AND f.data_pagamento::date >= date_trunc('month', CURRENT_DATE)::date
+                    GROUP BY e.empresa_id, e.nome_empresa, e.telefone, e.email, e.logo_url, a.status_assinatura
+                    ORDER BY e.nome_empresa
+                    """,
+                    (rs, i) -> new FaturamentoEmpresaCard(
+                            rs.getInt("empresa_id"),
+                            rs.getString("nome_empresa"),
+                            rs.getString("telefone"),
+                            rs.getString("email"),
+                            rs.getString("logo_url"),
+                            rs.getString("status_assinatura"),
+                            rs.getBigDecimal("total")
+                    )
+            );
+        }
+        if ("PENDENTE".equals(status)) {
+            return jdbc.query(
+                    """
+                    SELECT e.empresa_id, e.nome_empresa, e.telefone, e.email, e.logo_url,
+                           a.status_assinatura,
+                           COALESCE(SUM(f.valor), 0) AS total
+                    FROM flutz.empresa e
+                    JOIN flutz.fatura_assinatura f ON f.empresa_id = e.empresa_id
+                    LEFT JOIN LATERAL (
+                        SELECT status_assinatura FROM flutz.assinatura x
+                        WHERE x.empresa_id = e.empresa_id
+                        ORDER BY x.assinatura_id DESC LIMIT 1
+                    ) a ON TRUE
+                    WHERE f.status_fatura = 'PENDENTE'
+                      AND f.valor > 0
+                      AND f.data_vencimento IS NOT NULL
+                      AND f.data_vencimento::date >= CURRENT_DATE
+                      AND f.data_vencimento::date <= (CURRENT_DATE + INTERVAL '5 days')
+                    GROUP BY e.empresa_id, e.nome_empresa, e.telefone, e.email, e.logo_url, a.status_assinatura
+                    ORDER BY e.nome_empresa
+                    """,
+                    (rs, i) -> new FaturamentoEmpresaCard(
+                            rs.getInt("empresa_id"),
+                            rs.getString("nome_empresa"),
+                            rs.getString("telefone"),
+                            rs.getString("email"),
+                            rs.getString("logo_url"),
+                            rs.getString("status_assinatura"),
+                            rs.getBigDecimal("total")
+                    )
+            );
+        }
+        // ATRASADA: inclui faturas atrasadas e pendentes já vencidas
+        return jdbc.query(
+                """
+                SELECT e.empresa_id, e.nome_empresa, e.telefone, e.email, e.logo_url,
+                       a.status_assinatura,
+                       COALESCE(SUM(f.valor), 0) AS total
+                FROM flutz.empresa e
+                JOIN flutz.fatura_assinatura f ON f.empresa_id = e.empresa_id
+                LEFT JOIN LATERAL (
+                    SELECT status_assinatura FROM flutz.assinatura x
+                    WHERE x.empresa_id = e.empresa_id
+                    ORDER BY x.assinatura_id DESC LIMIT 1
+                ) a ON TRUE
+                WHERE f.valor > 0
+                  AND (
+                    f.status_fatura = 'ATRASADA'
+                    OR (
+                      f.status_fatura = 'PENDENTE'
+                      AND f.data_vencimento IS NOT NULL
+                      AND f.data_vencimento::date < CURRENT_DATE
+                    )
+                  )
+                GROUP BY e.empresa_id, e.nome_empresa, e.telefone, e.email, e.logo_url, a.status_assinatura
+                ORDER BY e.nome_empresa
+                """,
+                (rs, i) -> new FaturamentoEmpresaCard(
+                        rs.getInt("empresa_id"),
+                        rs.getString("nome_empresa"),
+                        rs.getString("telefone"),
+                        rs.getString("email"),
+                        rs.getString("logo_url"),
+                        rs.getString("status_assinatura"),
+                        rs.getBigDecimal("total")
+                )
+        );
+    }
+
+    @Transactional
+    public FaturamentoEmpresaCard marcarPagamentoManual(Integer empresaId) {
+        exigirAdmin();
+        if (empresaId == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Informe a empresa");
+        }
+        int updated = jdbc.update(
+                """
+                UPDATE flutz.fatura_assinatura
+                SET status_fatura = 'PAGA',
+                    data_pagamento = COALESCE(data_pagamento, CURRENT_TIMESTAMP),
+                    provider = COALESCE(provider, 'manual'),
+                    ultima_atualizacao = CURRENT_TIMESTAMP
+                WHERE empresa_id = ?
+                  AND status_fatura IN ('PENDENTE', 'ATRASADA')
+                """,
+                empresaId
+        );
+        if (updated == 0) {
+            // ainda assim pode reativar assinatura se já estiver paga
+            Integer exists = jdbc.query(
+                    "SELECT 1 FROM flutz.empresa WHERE empresa_id = ?",
+                    rs -> rs.next() ? 1 : null,
+                    empresaId
+            );
+            if (exists == null) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Empresa não encontrada");
+            }
+        }
+        jdbc.update(
+                """
+                UPDATE flutz.assinatura
+                SET status_assinatura = 'ATIVA',
+                    ultima_atualizacao = CURRENT_TIMESTAMP
+                WHERE empresa_id = ?
+                  AND status_assinatura IN ('INADIMPLENTE', 'SUSPENSA', 'TRIAL', 'ATIVA')
+                """,
+                empresaId
+        );
+        auditar("PAGAMENTO_MANUAL", "EMPRESA", empresaId, empresaId);
+        return faturamentoEmpresasPorStatus("PAGA").stream()
+                .filter(e -> empresaId.equals(e.empresaId()))
+                .findFirst()
+                .orElseGet(() -> jdbc.query(
+                        """
+                        SELECT e.empresa_id, e.nome_empresa, e.telefone, e.email, e.logo_url, a.status_assinatura, 0 AS total
+                        FROM flutz.empresa e
+                        LEFT JOIN LATERAL (
+                            SELECT status_assinatura FROM flutz.assinatura x
+                            WHERE x.empresa_id = e.empresa_id ORDER BY x.assinatura_id DESC LIMIT 1
+                        ) a ON TRUE
+                        WHERE e.empresa_id = ?
+                        """,
+                        (rs, i) -> new FaturamentoEmpresaCard(
+                                rs.getInt("empresa_id"),
+                                rs.getString("nome_empresa"),
+                                rs.getString("telefone"),
+                                rs.getString("email"),
+                                rs.getString("logo_url"),
+                                rs.getString("status_assinatura"),
+                                BigDecimal.ZERO
+                        ),
+                        empresaId
+                ).stream().findFirst().orElseThrow());
+    }
+
+    public List<Ponto> topEmpresasVinculo() {
+        exigirAdmin();
+        return jdbc.query(
+                """
+                SELECT e.nome_empresa AS rotulo,
+                       (CURRENT_DATE - a.data_inicio) AS valor
+                FROM flutz.assinatura a
+                JOIN flutz.empresa e ON e.empresa_id = a.empresa_id
+                WHERE a.status_assinatura = 'ATIVA'
+                  AND a.assinatura_id = (
+                    SELECT MAX(x.assinatura_id) FROM flutz.assinatura x WHERE x.empresa_id = a.empresa_id
+                  )
+                ORDER BY a.data_inicio ASC
+                LIMIT 10
+                """,
+                (rs, i) -> new Ponto(rs.getString("rotulo"), BigDecimal.valueOf(rs.getLong("valor")))
+        );
+    }
+
+    public List<Ponto> topEmpresasRendimento() {
+        exigirAdmin();
+        return jdbc.query(
+                """
+                SELECT e.nome_empresa AS rotulo, COALESCE(SUM(p.valor), 0) AS valor
+                FROM flutz.pagamento p
+                JOIN flutz.empresa e ON e.empresa_id = p.empresa_id
+                WHERE p.status_pagamento = 'PAGO'
+                GROUP BY e.empresa_id, e.nome_empresa
+                ORDER BY valor DESC
+                LIMIT 10
+                """,
+                (rs, i) -> new Ponto(rs.getString("rotulo"), rs.getBigDecimal("valor"))
+        );
+    }
+
+    public PaginaFaturamentoEmpresas faturamentoEmpresasPage(String busca, int page, int size) {
+        exigirAdmin();
+        int safeSize = Math.min(Math.max(size, 1), 15);
+        int safePage = Math.max(page, 0);
+        int offset = safePage * safeSize;
+        String termo = busca == null ? "" : busca.trim().toLowerCase(Locale.ROOT);
+        long total = nvlLong(jdbc.queryForObject(
+                """
+                SELECT COUNT(*)
+                FROM flutz.empresa e
+                WHERE ? = '' OR LOWER(e.nome_empresa) LIKE ?
+                """,
+                Long.class,
+                termo, "%" + termo + "%"
+        ));
+        List<FaturamentoEmpresaLinha> items = jdbc.query(
+                """
+                SELECT e.empresa_id, e.nome_empresa, e.email, e.telefone, e.logo_url,
+                       a.status_assinatura,
+                       COALESCE((
+                         SELECT SUM(p.valor) FROM flutz.pagamento p
+                         WHERE p.empresa_id = e.empresa_id
+                           AND p.status_pagamento = 'PAGO'
+                           AND p.pago_em::date >= date_trunc('month', CURRENT_DATE)::date
+                       ), 0) AS lucro_mes,
+                       COALESCE((
+                         SELECT SUM(p.valor) FROM flutz.pagamento p
+                         WHERE p.empresa_id = e.empresa_id
+                           AND p.status_pagamento = 'PAGO'
+                           AND p.pago_em::date >= date_trunc('year', CURRENT_DATE)::date
+                       ), 0) AS lucro_ano
+                FROM flutz.empresa e
+                LEFT JOIN LATERAL (
+                    SELECT status_assinatura FROM flutz.assinatura x
+                    WHERE x.empresa_id = e.empresa_id
+                    ORDER BY x.assinatura_id DESC LIMIT 1
+                ) a ON TRUE
+                WHERE ? = '' OR LOWER(e.nome_empresa) LIKE ?
+                ORDER BY e.nome_empresa
+                LIMIT ? OFFSET ?
+                """,
+                (rs, i) -> new FaturamentoEmpresaLinha(
+                        rs.getInt("empresa_id"),
+                        rs.getString("nome_empresa"),
+                        rs.getString("email"),
+                        rs.getString("telefone"),
+                        rs.getString("logo_url"),
+                        rs.getString("status_assinatura"),
+                        rs.getBigDecimal("lucro_mes"),
+                        rs.getBigDecimal("lucro_ano")
+                ),
+                termo, "%" + termo + "%", safeSize, offset
+        );
+        return new PaginaFaturamentoEmpresas(items, total, safePage, safeSize);
+    }
+
+    public List<FaturamentoMovimento> faturamentoEmpresaDetalhes(Integer empresaId) {
+        exigirAdmin();
+        if (empresaId == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Informe a empresa");
+        }
+        return jdbc.query(
+                """
+                SELECT p.pagamento_id,
+                       p.tipo_origem,
+                       CASE
+                         WHEN a.tipo = 'VACINACAO' OR a.empresa_vacina_id IS NOT NULL THEN 'VACINACAO'
+                         WHEN p.tipo_origem = 'ATENDIMENTO' OR a.tipo = 'ATENDIMENTO' THEN 'ATENDIMENTO'
+                         ELSE COALESCE(p.tipo_origem, 'OUTRO')
+                       END AS categoria,
+                       COALESCE(
+                         v.nome_vacina,
+                         NULLIF(es.nome_exibicao, ''),
+                         ts.tipo_servico,
+                         p.descricao,
+                         'Pagamento'
+                       ) AS descricao,
+                       pet.nome_pet,
+                       c.nome_cliente,
+                       p.valor,
+                       p.pago_em,
+                       p.status_pagamento
+                FROM flutz.pagamento p
+                LEFT JOIN flutz.agendamento a ON a.agendamento_id = p.agendamento_id
+                LEFT JOIN flutz.empresa_servico es ON es.empresa_servico_id = COALESCE(p.empresa_servico_id, a.empresa_servico_id)
+                LEFT JOIN flutz.tipo_servico ts ON ts.tipo_servico_id = es.tipo_servico_id
+                LEFT JOIN flutz.empresa_vacina ev ON ev.empresa_vacina_id = a.empresa_vacina_id
+                LEFT JOIN flutz.vacina v ON v.vacina_id = ev.vacina_id
+                LEFT JOIN flutz.pet pet ON pet.pet_id = a.pet_id
+                LEFT JOIN flutz.cliente c ON c.cliente_id = COALESCE(p.cliente_id, a.cliente_id)
+                WHERE p.empresa_id = ?
+                  AND p.status_pagamento = 'PAGO'
+                ORDER BY p.pago_em DESC NULLS LAST, p.pagamento_id DESC
+                LIMIT 200
+                """,
+                (rs, i) -> new FaturamentoMovimento(
+                        rs.getInt("pagamento_id"),
+                        rs.getString("categoria"),
+                        rs.getString("descricao"),
+                        rs.getString("nome_pet"),
+                        rs.getString("nome_cliente"),
+                        rs.getBigDecimal("valor"),
+                        rs.getTimestamp("pago_em") == null ? null : rs.getTimestamp("pago_em").toInstant().toString(),
+                        rs.getString("status_pagamento")
+                ),
+                empresaId
+        );
     }
 
     private Integer insertReturning(String sql, Object... args) {
@@ -639,6 +1099,10 @@ public class PlatformService {
     private long count(String sql, Object... args) {
         Long value = jdbc.queryForObject(sql, Long.class, args);
         return value == null ? 0 : value;
+    }
+
+    private static long nvlLong(Long value) {
+        return value == null ? 0L : value;
     }
 
     private static BigDecimal nvl(BigDecimal value) {
@@ -741,6 +1205,59 @@ public class PlatformService {
     }
 
     public record Item(Integer id, String nome) {
+    }
+
+    public record FaturamentoResumo(
+            BigDecimal pagoMes,
+            BigDecimal pendente,
+            BigDecimal atrasado,
+            long empresasPagoMes,
+            long empresasPendente,
+            long empresasAtrasado
+    ) {
+    }
+
+    public record FaturamentoEmpresaCard(
+            Integer empresaId,
+            String nome,
+            String telefone,
+            String email,
+            String logoUrl,
+            String statusAssinatura,
+            BigDecimal total
+    ) {
+    }
+
+    public record FaturamentoEmpresaLinha(
+            Integer empresaId,
+            String nome,
+            String email,
+            String telefone,
+            String logoUrl,
+            String statusAssinatura,
+            BigDecimal lucroMes,
+            BigDecimal lucroAno
+    ) {
+    }
+
+    public record PaginaFaturamentoEmpresas(
+            List<FaturamentoEmpresaLinha> items,
+            long total,
+            int page,
+            int size
+    ) {
+    }
+
+    public record FaturamentoMovimento(
+            Integer id,
+            String categoria,
+            String descricao,
+            String pet,
+            String tutor,
+            BigDecimal valor,
+            String pagoEm,
+            String status
+    ) {
     }
 
 }

@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 import br.com.upvibe.flutz.billing.ClinicBookingPaymentService;
 import br.com.upvibe.flutz.billing.ClinicCouponService;
 import br.com.upvibe.flutz.billing.ClinicPaymentAccountService;
+import br.com.upvibe.flutz.billing.MercadoPagoOAuthService;
 import br.com.upvibe.flutz.billing.MercadoPagoService;
 import br.com.upvibe.flutz.security.AuthHolder;
 
@@ -26,15 +27,18 @@ public class ClinicFinanceController {
     private final ClinicPaymentAccountService contas;
     private final ClinicCouponService cupons;
     private final ClinicBookingPaymentService pagamentos;
+    private final MercadoPagoOAuthService oauth;
 
     public ClinicFinanceController(
             ClinicPaymentAccountService contas,
             ClinicCouponService cupons,
-            ClinicBookingPaymentService pagamentos
+            ClinicBookingPaymentService pagamentos,
+            MercadoPagoOAuthService oauth
     ) {
         this.contas = contas;
         this.cupons = cupons;
         this.pagamentos = pagamentos;
+        this.oauth = oauth;
     }
 
     @GetMapping("/clinica/recebimento")
@@ -43,9 +47,10 @@ public class ClinicFinanceController {
         return contas.atual();
     }
 
-    @PostMapping("/clinica/recebimento")
-    public ClinicPaymentAccountService.ContaView salvarRecebimento(@RequestBody ClinicPaymentAccountService.SalvarConta body) {
-        return contas.salvar(body);
+    @GetMapping("/clinica/recebimento/mercadopago/connect")
+    public MercadoPagoOAuthService.ConnectStart conectarMercadoPago() {
+        AuthHolder.current();
+        return oauth.iniciarConexao();
     }
 
     @PostMapping("/clinica/recebimento/desconectar")

@@ -481,11 +481,15 @@ public class ClinicOpsService {
                     SELECT pet_id FROM flutz.agendamento WHERE empresa_id = ?
                     UNION
                     SELECT pet_id FROM flutz.atendimento WHERE empresa_id = ?
+                    UNION
+                    SELECT p2.pet_id FROM flutz.pet p2
+                    JOIN flutz.empresa_cliente ec ON ec.cliente_id = p2.cliente_id
+                    WHERE ec.empresa_id = ?
                 )
                 ORDER BY COALESCE(h.data_proxima_dose, h.data_aplicacao) DESC
                 """,
                 (rs, i) -> mapVacinaLinha(rs),
-                empresa.getId(), empresa.getId()
+                empresa.getId(), empresa.getId(), empresa.getId()
         );
     }
 

@@ -25,7 +25,7 @@ public class Cliente {
     @Column(nullable = false, unique = true, length = 14)
     private String cpf;
 
-    @Column(name = "senha_hash", nullable = false)
+    @Column(name = "senha_hash")
     private String senhaHash;
 
     @Column(length = 20)
@@ -38,6 +38,12 @@ public class Cliente {
 
     @Column(name = "permitir_notificacoes", nullable = false)
     private boolean permitirNotificacoes = true;
+
+    @Column(name = "cadastro_completo", nullable = false)
+    private boolean cadastroCompleto = true;
+
+    @Column(name = "criado_por_empresa_id")
+    private Integer criadoPorEmpresaId;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "status_id", nullable = false)
@@ -100,6 +106,22 @@ public class Cliente {
 
     public void setPermitirNotificacoes(boolean permitirNotificacoes) {
         this.permitirNotificacoes = permitirNotificacoes;
+    }
+
+    public boolean isCadastroCompleto() {
+        return cadastroCompleto;
+    }
+
+    public void setCadastroCompleto(boolean cadastroCompleto) {
+        this.cadastroCompleto = cadastroCompleto;
+    }
+
+    public Integer getCriadoPorEmpresaId() {
+        return criadoPorEmpresaId;
+    }
+
+    public void setCriadoPorEmpresaId(Integer criadoPorEmpresaId) {
+        this.criadoPorEmpresaId = criadoPorEmpresaId;
     }
 
     public Status getStatus() {

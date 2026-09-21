@@ -62,6 +62,14 @@ public class ClinicCatalogController {
         return catalogos.definirAtivo(tipo, id, body.ativo());
     }
 
+    @PostMapping("/clinica/catalogos/vacinas/{id}/oferta")
+    public ClinicCatalogService.Item definirOfertaVacina(
+            @PathVariable Integer id,
+            @RequestBody OfertaBody body
+    ) {
+        return catalogos.definirOfertaVacina(id, body != null && body.oferecer());
+    }
+
     @DeleteMapping("/clinica/catalogos/{tipo}/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void remover(@PathVariable String tipo, @PathVariable Integer id) {
@@ -72,5 +80,8 @@ public class ClinicCatalogController {
     }
 
     public record AtivoBody(boolean ativo) {
+    }
+
+    public record OfertaBody(boolean oferecer) {
     }
 }

@@ -45,12 +45,12 @@ const faqs = [
   {
     question: "Como funciona a contratação da clínica?",
     answer:
-      "No cadastro da clínica você informa os dados da empresa e assina o plano mensal do Flutz (R$ 149,90). A assinatura começa em período de testes até o pagamento da plataforma.",
+      "No cadastro da clínica você informa os dados da empresa e começa com 14 dias gratuitos para testar o Flutz. Depois do período de testes, a assinatura mensal precisa ser paga para manter o acesso.",
   },
   {
     question: "Como funciona o pagamento da assinatura?",
     answer:
-      "A clínica paga a mensalidade única da plataforma (R$ 149,90). Isso é distinto dos pagamentos que a clínica recebe de tutores ou doações.",
+      "Após os 14 dias gratuitos, a clínica paga a mensalidade da plataforma. Isso é distinto dos pagamentos que a clínica recebe de tutores ou doações.",
   },
   {
     question: "Posso cancelar?",

@@ -217,7 +217,7 @@ public class MercadoPagoService {
         if (status == 401 || status == 403) {
             return new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
-                    "Credenciais da clínica rejeitadas pelo Mercado Pago. Recadastre Public Key e Access Token em Financeiro."
+                    "Credenciais da clínica rejeitadas pelo Mercado Pago. Conecte a conta novamente em Financeiro."
             );
         }
         if (detalhe != null && !detalhe.isBlank()) {
@@ -225,7 +225,7 @@ public class MercadoPagoService {
         }
         return new ResponseStatusException(
                 HttpStatus.BAD_GATEWAY,
-                "Não foi possível gerar o " + contexto + " no Mercado Pago. Verifique as chaves da clínica e tente de novo."
+                "Não foi possível gerar o " + contexto + " no Mercado Pago. Verifique a conexão da clínica e tente de novo."
         );
     }
 

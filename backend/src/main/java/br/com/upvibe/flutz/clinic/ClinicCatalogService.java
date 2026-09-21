@@ -74,13 +74,16 @@ public class ClinicCatalogService {
             );
             case "vacinas" -> query(
                     """
-                    SELECT vacina_id AS id, nome_vacina AS nome,
-                           (empresa_id IS NOT NULL AND empresa_id = ?) AS da_clinica
-                    FROM flutz.vacina
-                    WHERE empresa_id IS NULL OR empresa_id = ?
-                    ORDER BY nome_vacina
+                    SELECT v.vacina_id AS id, v.nome_vacina AS nome,
+                           EXISTS (
+                             SELECT 1 FROM flutz.empresa_vacina ev
+                             WHERE ev.empresa_id = ? AND ev.vacina_id = v.vacina_id
+                           ) AS da_clinica
+                    FROM flutz.vacina v
+                    WHERE v.empresa_id IS NULL
+                    ORDER BY v.nome_vacina
                     """,
-                    empresaId, empresaId
+                    empresaId
             );
             case "doencas" -> query(
                     """
@@ -200,14 +203,10 @@ public class ClinicCatalogService {
                             Integer.class, valor, especieId, empresaId
                     );
                 }
-                case "vacinas" -> {
-                    Integer vacinaId = jdbc.queryForObject(
-                            "INSERT INTO flutz.vacina (nome_vacina, empresa_id) VALUES (?, ?) RETURNING vacina_id",
-                            Integer.class, valor, empresaId
-                    );
-                    oferecerVacinaNaAgenda(empresaId, vacinaId);
-                    yield vacinaId;
-                }
+                case "vacinas" -> throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "Vacinas são cadastradas pela plataforma Flutz. Ative as que sua clínica oferece."
+                );
                 case "doencas" -> jdbc.queryForObject(
                         "INSERT INTO flutz.doenca (nome_doenca, empresa_id) VALUES (?, ?) RETURNING doenca_id",
                         Integer.class, valor, empresaId
@@ -264,9 +263,9 @@ public class ClinicCatalogService {
                         "UPDATE flutz.pet_raca SET descricao = ? WHERE pet_raca_id = ? AND empresa_id = ?",
                         valor, id, empresaId
                 );
-                case "vacinas" -> jdbc.update(
-                        "UPDATE flutz.vacina SET nome_vacina = ? WHERE vacina_id = ? AND empresa_id = ?",
-                        valor, id, empresaId
+                case "vacinas" -> throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "Vacinas do catálogo Flutz não podem ser editadas pela clínica."
                 );
                 case "doencas" -> jdbc.update(
                         "UPDATE flutz.doenca SET nome_doenca = ? WHERE doenca_id = ? AND empresa_id = ?",
@@ -369,11 +368,9 @@ public class ClinicCatalogService {
                     yield n;
                 }
                 case "vacinas" -> {
+                    // Clínica só remove a oferta; o catálogo global permanece.
                     removerOfertaVacina(empresaId, id);
-                    yield jdbc.update(
-                            "DELETE FROM flutz.vacina WHERE vacina_id = ? AND empresa_id = ?",
-                            id, empresaId
-                    );
+                    yield 1;
                 }
                 case "doencas" -> jdbc.update(
                         "DELETE FROM flutz.doenca WHERE doenca_id = ? AND empresa_id = ?",
@@ -406,6 +403,35 @@ public class ClinicCatalogService {
         if (removed == 0) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Só é possível remover o que esta clínica cadastrou.");
         }
+    }
+
+    @Transactional
+    public Item definirOfertaVacina(Integer vacinaId, boolean oferecer) {
+        AuthPrincipal auth = AuthHolder.current();
+        exigirAdminClinica(auth, oferecer ? "ativa" : "desativa");
+        if (vacinaId == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Informe a vacina");
+        }
+        Integer empresaId = clinic.empresaAtual().getId();
+        Integer existe = jdbc.query(
+                "SELECT vacina_id FROM flutz.vacina WHERE vacina_id = ? AND empresa_id IS NULL",
+                rs -> rs.next() ? rs.getInt(1) : null,
+                vacinaId
+        );
+        if (existe == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Vacina não encontrada no catálogo Flutz");
+        }
+        if (oferecer) {
+            oferecerVacinaNaAgenda(empresaId, vacinaId);
+        } else {
+            removerOfertaVacina(empresaId, vacinaId);
+        }
+        String nome = jdbc.queryForObject(
+                "SELECT nome_vacina FROM flutz.vacina WHERE vacina_id = ?",
+                String.class,
+                vacinaId
+        );
+        return new Item(vacinaId, nome, oferecer, null, true);
     }
 
     private void oferecerVacinaNaAgenda(Integer empresaId, Integer vacinaId) {

@@ -568,6 +568,185 @@ public class ClinicService {
         return AtendimentoResponse.from(atendimentos.save(item), true);
     }
 
+    /**
+     * Walk-in: tutor sem conta (ou já cadastrado) + pet + atendimento concluído ou vacina aplicada.
+     */
+    @Transactional
+    public WalkInResult registrarWalkIn(WalkInRequest req) {
+        AuthPrincipal auth = AuthHolder.current();
+        if (!auth.colaborador() && !auth.adminPlataforma()) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Somente a equipe registra atendimento sem cadastro");
+        }
+        if (req == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Dados inválidos");
+        }
+        String tipo = req.tipo() == null ? "" : req.tipo().trim().toUpperCase(Locale.ROOT);
+        if (!"ATENDIMENTO".equals(tipo) && !"VACINACAO".equals(tipo)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Informe o tipo: ATENDIMENTO ou VACINACAO");
+        }
+        String cpf = digits(req.cpf());
+        if (cpf.length() != 11) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "CPF inválido");
+        }
+        if (req.nomeTutor() == null || req.nomeTutor().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Informe o nome do tutor");
+        }
+        if (req.nomePet() == null || req.nomePet().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Informe o nome do pet");
+        }
+        if (req.especieId() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Informe a espécie do pet");
+        }
+
+        Empresa empresa = empresaAtual();
+        Status ativo = ativo();
+        Cliente cliente = clientes.findByCpf(cpf).orElse(null);
+        if (cliente == null) {
+            cliente = new Cliente();
+            cliente.setNomeCliente(req.nomeTutor().trim());
+            cliente.setCpf(cpf);
+            cliente.setSenhaHash(null);
+            cliente.setCadastroCompleto(false);
+            cliente.setCriadoPorEmpresaId(empresa.getId());
+            cliente.setEmail(blank(req.email()));
+            cliente.setTelefone(blank(req.telefone()));
+            cliente.setPermitirNotificacoes(true);
+            cliente.setStatus(ativo);
+            cliente = clientes.save(cliente);
+            vincularTutor(empresa, cliente);
+        } else {
+            if (!cliente.isCadastroCompleto()) {
+                cliente.setNomeCliente(req.nomeTutor().trim());
+                if (blank(req.telefone()) != null) {
+                    cliente.setTelefone(blank(req.telefone()));
+                }
+                if (blank(req.email()) != null) {
+                    cliente.setEmail(blank(req.email()));
+                }
+                if (cliente.getCriadoPorEmpresaId() == null) {
+                    cliente.setCriadoPorEmpresaId(empresa.getId());
+                }
+                cliente = clientes.save(cliente);
+            }
+            vincularTutor(empresa, cliente);
+        }
+
+        Pet pet = new Pet();
+        pet.setCliente(cliente);
+        pet.setEmpresa(empresa);
+        pet.setEspecie(especies.findById(req.especieId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Espécie inválida")));
+        if (req.racaId() != null) {
+            pet.setRaca(racas.findById(req.racaId()).orElse(null));
+        }
+        pet.setNomePet(req.nomePet().trim());
+        pet.setSexo(req.sexo() == null || req.sexo().isBlank() ? "I" : req.sexo().trim().toUpperCase(Locale.ROOT));
+        pet.setPeso(req.peso());
+        if (req.dataAniversario() != null && !req.dataAniversario().isBlank()) {
+            pet.setDataAniversario(LocalDate.parse(req.dataAniversario()));
+        }
+        pet.setStatus(ativo);
+        pet = pets.save(pet);
+
+        Colaborador colaborador = auth.colaborador()
+                ? colaboradores.findById(auth.atorId()).orElseThrow()
+                : colaboradores.findByEmpresaIdOrderByNomeColaboradorAsc(empresa.getId()).stream()
+                .findFirst()
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "A clínica precisa de um colaborador para registrar o atendimento"
+                ));
+
+        Integer atendimentoId = null;
+        Integer vacinacaoId = null;
+
+        if ("ATENDIMENTO".equals(tipo)) {
+            Atendimento item = new Atendimento();
+            item.setEmpresa(empresa);
+            item.setCliente(cliente);
+            item.setPet(pet);
+            if (req.servicoId() != null) {
+                item.setServico(servicos.findByIdAndEmpresaId(req.servicoId(), empresa.getId()).orElse(null));
+            }
+            item.setStatus(atendimentoStatuses.findByDescricaoIgnoreCase("concluido")
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Status de atendimento ausente")));
+            item.setOrigem("COLABORADOR");
+            item.setColaboradorCriacao(colaborador);
+            item.setResumoCliente(blank(req.resumo()));
+            item.setDetalhes(blank(req.detalhes()));
+            Instant quando = parseInstantOrNow(req.data());
+            item.setDataInicio(quando);
+            atendimentoId = atendimentos.save(item).getId();
+        } else {
+            if (req.vacinaId() == null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Informe a vacina aplicada");
+            }
+            if (req.dataAplicacao() == null || req.dataAplicacao().isBlank()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Informe a data de aplicação");
+            }
+            LocalDate aplicacao = LocalDate.parse(req.dataAplicacao());
+            LocalDate proxima = req.dataProximaDose() == null || req.dataProximaDose().isBlank()
+                    ? null
+                    : LocalDate.parse(req.dataProximaDose());
+            vacinacaoId = jdbc.queryForObject(
+                    """
+                    INSERT INTO flutz.historico_vacinacao
+                      (pet_id, vacina_id, colaborador_id, data_aplicacao, data_proxima_dose, lote, observacoes)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    RETURNING historico_vacinacao_id
+                    """,
+                    Integer.class,
+                    pet.getId(),
+                    req.vacinaId(),
+                    colaborador.getId(),
+                    aplicacao,
+                    proxima,
+                    blank(req.lote()),
+                    blank(req.observacoes())
+            );
+            // Garante visibilidade na lista de vacinas (pets com atendimento na clínica).
+            Atendimento item = new Atendimento();
+            item.setEmpresa(empresa);
+            item.setCliente(cliente);
+            item.setPet(pet);
+            item.setStatus(atendimentoStatuses.findByDescricaoIgnoreCase("concluido")
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Status de atendimento ausente")));
+            item.setOrigem("COLABORADOR");
+            item.setColaboradorCriacao(colaborador);
+            item.setResumoCliente("Vacinação walk-in");
+            item.setDetalhes(blank(req.observacoes()));
+            Instant quando = aplicacao.atStartOfDay(java.time.ZoneId.of("America/Sao_Paulo")).toInstant();
+            item.setDataInicio(quando);
+            atendimentoId = atendimentos.save(item).getId();
+        }
+
+        return new WalkInResult(
+                cliente.getId(),
+                !cliente.isCadastroCompleto(),
+                pet.getId(),
+                pet.getNomePet(),
+                cliente.getNomeCliente(),
+                tipo,
+                atendimentoId,
+                vacinacaoId
+        );
+    }
+
+    private static Instant parseInstantOrNow(String value) {
+        if (value == null || value.isBlank()) {
+            return Instant.now();
+        }
+        String v = value.trim();
+        try {
+            if (v.length() == 10) {
+                return LocalDate.parse(v).atStartOfDay(java.time.ZoneId.of("America/Sao_Paulo")).toInstant();
+            }
+            return Instant.parse(v);
+        } catch (Exception ex) {
+            return Instant.now();
+        }
+    }
+
     public List<AdminClinicaResponse> clinicasAdmin() {
         AuthPrincipal auth = AuthHolder.current();
         if (!auth.adminPlataforma()) {
@@ -882,5 +1061,41 @@ public class ClinicService {
     }
 
     public record NovoAtendimentoRequest(Integer petId, Integer agendamentoId, Integer servicoId, String resumoCliente, String detalhes) {
+    }
+
+    public record WalkInRequest(
+            String tipo,
+            String cpf,
+            String nomeTutor,
+            String telefone,
+            String email,
+            String nomePet,
+            Integer especieId,
+            Integer racaId,
+            String sexo,
+            BigDecimal peso,
+            String dataAniversario,
+            Integer servicoId,
+            String resumo,
+            String detalhes,
+            String data,
+            Integer vacinaId,
+            String dataAplicacao,
+            String dataProximaDose,
+            String lote,
+            String observacoes
+    ) {
+    }
+
+    public record WalkInResult(
+            Integer clienteId,
+            boolean provisorio,
+            Integer petId,
+            String pet,
+            String tutor,
+            String tipo,
+            Integer atendimentoId,
+            Integer vacinacaoId
+    ) {
     }
 }

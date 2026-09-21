@@ -132,7 +132,6 @@ export function navFor(variant: PanelVariant, session: Session | null): NavGroup
       {
         label: "Negócio",
         items: [
-          { to: "/admin/assinaturas", label: "Assinaturas", icon: <CreditCard className={size} /> },
           { to: "/admin/faturamento", label: "Faturamento", icon: <Wallet className={size} /> },
           { to: "/admin/tokens", label: "Tokens", icon: <Ticket className={size} /> },
         ],
@@ -145,7 +144,7 @@ export function navFor(variant: PanelVariant, session: Session | null): NavGroup
           { to: "/admin/avaliacoes", label: "Avaliações", icon: <Star className={size} /> },
           { to: "/admin/consulta-pets", label: "Consulta de pets", icon: <PawPrint className={size} /> },
           { to: "/admin/suporte", label: "Suporte", icon: <LifeBuoy className={size} /> },
-          { to: "/admin/catalogos", label: "Motivos de chat", icon: <BookOpen className={size} /> },
+          { to: "/admin/catalogos", label: "Catálogos", icon: <BookOpen className={size} /> },
         ],
       },
       {

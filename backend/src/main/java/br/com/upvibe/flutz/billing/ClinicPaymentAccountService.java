@@ -18,12 +18,12 @@ public class ClinicPaymentAccountService {
 
     private final JdbcTemplate jdbc;
     private final ClinicService clinic;
-    private final MercadoPagoService mercadoPago;
+    private final MercadoPagoOAuthService oauth;
 
-    public ClinicPaymentAccountService(JdbcTemplate jdbc, ClinicService clinic, MercadoPagoService mercadoPago) {
+    public ClinicPaymentAccountService(JdbcTemplate jdbc, ClinicService clinic, MercadoPagoOAuthService oauth) {
         this.jdbc = jdbc;
         this.clinic = clinic;
-        this.mercadoPago = mercadoPago;
+        this.oauth = oauth;
     }
 
     public ContaView atual() {
@@ -35,25 +35,33 @@ public class ClinicPaymentAccountService {
         }
         return jdbc.query(
                 """
-                SELECT conta_pagamento_id, provider, account_id, status_conta, public_key, nome_exibicao, connected_at
+                SELECT conta_pagamento_id, provider, account_id, status_conta, public_key, nome_exibicao,
+                       connected_at, auth_mode, provider_user_id
                 FROM flutz.conta_pagamento
                 WHERE empresa_id = ?
                 ORDER BY conta_pagamento_id DESC
                 LIMIT 1
                 """,
-                rs -> rs.next() ? mapView(rs) : ContaView.vazia(),
+                rs -> rs.next() ? mapView(rs) : ContaView.vazia(oauth.oauthDisponivel()),
                 empresaId
         );
     }
 
+    /**
+     * Legado: salva Public Key + Access Token colados manualmente.
+     * Mantido apenas como fallback interno para clínicas antigas; a UI usa OAuth.
+     */
     @Transactional
-    public ContaView salvar(SalvarConta req) {
+    @Deprecated
+    public ContaView salvarManual(SalvarConta req) {
         exigirAdminClinica();
         Integer empresaId = clinic.empresaAtual().getId();
         String publicKey = limpar(req.publicKey());
         String accessToken = limpar(req.accessToken());
         String nome = blank(req.nomeExibicao());
-        mercadoPago.validarCredenciaisClinica(publicKey, accessToken);
+        if (publicKey == null || accessToken == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Informe a Public Key e o Access Token");
+        }
         String accountId = "mp-" + empresaId + "-" + Integer.toHexString(publicKey.hashCode());
         jdbc.update(
                 """
@@ -77,7 +85,10 @@ public class ClinicPaymentAccountService {
                     """
                     UPDATE flutz.conta_pagamento
                     SET account_id = ?, public_key = ?, access_token = ?, nome_exibicao = ?,
-                        status_conta = 'CONECTADA', connected_at = CURRENT_TIMESTAMP, disconnected_at = NULL
+                        refresh_token = NULL, token_expires_at = NULL, provider_user_id = NULL,
+                        oauth_scope = NULL, auth_mode = 'manual',
+                        status_conta = 'CONECTADA', connected_at = CURRENT_TIMESTAMP, disconnected_at = NULL,
+                        ultima_atualizacao = CURRENT_TIMESTAMP
                     WHERE conta_pagamento_id = ?
                     """,
                     accountId, publicKey, accessToken, nome, existente
@@ -86,8 +97,9 @@ public class ClinicPaymentAccountService {
             jdbc.update(
                     """
                     INSERT INTO flutz.conta_pagamento
-                      (empresa_id, provider, account_id, status_conta, public_key, access_token, nome_exibicao, connected_at)
-                    VALUES (?, 'mercadopago', ?, 'CONECTADA', ?, ?, ?, CURRENT_TIMESTAMP)
+                      (empresa_id, provider, account_id, status_conta, public_key, access_token,
+                       nome_exibicao, auth_mode, connected_at)
+                    VALUES (?, 'mercadopago', ?, 'CONECTADA', ?, ?, ?, 'manual', CURRENT_TIMESTAMP)
                     """,
                     empresaId, accountId, publicKey, accessToken, nome
             );
@@ -102,7 +114,12 @@ public class ClinicPaymentAccountService {
         jdbc.update(
                 """
                 UPDATE flutz.conta_pagamento
-                SET status_conta = 'DESCONECTADA', disconnected_at = CURRENT_TIMESTAMP, access_token = NULL
+                SET status_conta = 'DESCONECTADA',
+                    disconnected_at = CURRENT_TIMESTAMP,
+                    access_token = NULL,
+                    refresh_token = NULL,
+                    token_expires_at = NULL,
+                    ultima_atualizacao = CURRENT_TIMESTAMP
                 WHERE empresa_id = ? AND status_conta = 'CONECTADA'
                 """,
                 empresaId
@@ -111,40 +128,14 @@ public class ClinicPaymentAccountService {
     }
 
     public ContaCredenciais exigirCredenciais(Integer empresaId) {
-        ContaCredenciais conta = jdbc.query(
-                """
-                SELECT conta_pagamento_id, public_key, access_token
-                FROM flutz.conta_pagamento
-                WHERE empresa_id = ? AND status_conta = 'CONECTADA' AND provider = 'mercadopago'
-                ORDER BY conta_pagamento_id DESC
-                LIMIT 1
-                """,
-                rs -> {
-                    if (!rs.next()) {
-                        return null;
-                    }
-                    return new ContaCredenciais(
-                            rs.getInt(1),
-                            rs.getString(2),
-                            rs.getString(3)
-                    );
-                },
-                empresaId
-        );
-        if (conta == null || conta.publicKey() == null || conta.publicKey().isBlank()
-                || conta.accessToken() == null || conta.accessToken().isBlank()) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "A clínica ainda não configurou a conta de recebimento. Peça para cadastrar o Mercado Pago em Financeiro."
-            );
-        }
-        return conta;
+        return oauth.exigirCredenciaisValidas(empresaId);
     }
 
     public ContaView buscarConectada(Integer empresaId) {
         return jdbc.query(
                 """
-                SELECT conta_pagamento_id, provider, account_id, status_conta, public_key, nome_exibicao, connected_at
+                SELECT conta_pagamento_id, provider, account_id, status_conta, public_key, nome_exibicao,
+                       connected_at, auth_mode, provider_user_id
                 FROM flutz.conta_pagamento
                 WHERE empresa_id = ? AND status_conta = 'CONECTADA'
                 ORDER BY conta_pagamento_id DESC
@@ -158,16 +149,25 @@ public class ClinicPaymentAccountService {
     private ContaView mapView(java.sql.ResultSet rs) throws java.sql.SQLException {
         Timestamp connected = rs.getTimestamp("connected_at");
         String publicKey = rs.getString("public_key");
+        String status = rs.getString("status_conta");
+        boolean conectada = "CONECTADA".equalsIgnoreCase(status);
+        String authMode = rs.getString("auth_mode");
+        if (authMode == null || authMode.isBlank()) {
+            authMode = "manual";
+        }
         return new ContaView(
                 rs.getInt("conta_pagamento_id"),
                 rs.getString("provider"),
                 rs.getString("account_id"),
-                rs.getString("status_conta"),
-                publicKey,
+                status,
+                null,
                 mascarar(publicKey),
                 rs.getString("nome_exibicao"),
                 connected == null ? null : connected.toInstant().toString(),
-                "CONECTADA".equalsIgnoreCase(rs.getString("status_conta"))
+                conectada,
+                authMode,
+                rs.getString("provider_user_id"),
+                oauth.oauthDisponivel()
         );
     }
 
@@ -207,16 +207,24 @@ public class ClinicPaymentAccountService {
             String publicKeyMascarada,
             String nomeExibicao,
             String conectadaEm,
-            boolean conectada
+            boolean conectada,
+            String authMode,
+            String providerUserId,
+            boolean oauthDisponivel
     ) {
-        static ContaView vazia() {
-            return new ContaView(null, "mercadopago", null, "PENDENTE", null, null, null, null, false);
+        static ContaView vazia(boolean oauthDisponivel) {
+            return new ContaView(
+                    null, "mercadopago", null, "PENDENTE", null, null, null, null,
+                    false, "oauth", null, oauthDisponivel
+            );
         }
     }
 
     public record ContaCredenciais(Integer id, String publicKey, String accessToken) {
     }
 
+    /** @deprecated Use OAuth Connect. Mantido só para fallback interno. */
+    @Deprecated
     public record SalvarConta(String publicKey, String accessToken, String nomeExibicao) {
     }
 

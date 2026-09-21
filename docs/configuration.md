@@ -42,9 +42,14 @@ Todos os parâmetros configuráveis do Flutz entram por variável de ambiente. O
 | `INITIAL_ADMIN_NAME` | Sim na 1ª subida | Não | Nome do administrador da plataforma |
 | `INITIAL_ADMIN_EMAIL` | Sim na 1ª subida | Não | E-mail do administrador da plataforma |
 | `INITIAL_ADMIN_PASSWORD` | Sim na 1ª subida | Sim | Senha inicial. Usada só no bootstrap; persistida como hash |
-| `MERCADOPAGO_PUBLIC_KEY` | Sim para PIX/cartão | Não | Chave pública do Mercado Pago |
-| `MERCADOPAGO_ACCESS_TOKEN` | Sim para PIX/cartão | Sim | Token de acesso do Mercado Pago |
+| `MERCADOPAGO_PUBLIC_KEY` | Sim para PIX/cartão da **mensalidade** | Não | Chave pública da conta plataforma |
+| `MERCADOPAGO_ACCESS_TOKEN` | Sim para PIX/cartão da **mensalidade** | Sim | Token da conta plataforma |
 | `MERCADOPAGO_WEBHOOK_SECRET` | Sim em produção | Sim | Segredo da assinatura do webhook |
+| `MERCADOPAGO_CLIENT_ID` | Sim para clínicas conectarem OAuth | Não | Client ID do aplicativo Connect |
+| `MERCADOPAGO_CLIENT_SECRET` | Sim para clínicas conectarem OAuth | Sim | Client Secret do aplicativo Connect |
+| `MERCADOPAGO_REDIRECT_URI` | Sim para OAuth | Não | Callback: `{APP_URL}/api/public/mercadopago/oauth/callback` |
+
+Documentação detalhada do Connect: [docs/mercadopago-oauth.md](mercadopago-oauth.md).
 
 ## Regras
 

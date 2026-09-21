@@ -6,8 +6,10 @@ import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.http.converter.HttpMessageNotWritableException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -54,6 +56,19 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.BAD_REQUEST, "Não foi possível ler os dados enviados.", request);
     }
 
+    /**
+     * Comum em endpoints SSE (produces text/event-stream): se a autenticação falha,
+     * o Content-Type já foi negociado e o body JSON quebrava o handler — derrubava o request.
+     */
+    @ExceptionHandler(HttpMessageNotWritableException.class)
+    public ResponseEntity<ApiErrorResponse> handleNotWritable(
+            HttpMessageNotWritableException ex,
+            HttpServletRequest request
+    ) {
+        log.warn("Resposta não serializável em {}: {}", request.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.INTERNAL_SERVER_ERROR, "Não foi possível concluir. Tente de novo.", request);
+    }
+
     @ExceptionHandler({NoHandlerFoundException.class, NoResourceFoundException.class})
     public ResponseEntity<ApiErrorResponse> handleNotFound(Exception ex, HttpServletRequest request) {
         return build(HttpStatus.NOT_FOUND, "Recurso não encontrado.", request);
@@ -67,6 +82,7 @@ public class GlobalExceptionHandler {
         HttpStatus status = HttpStatus.valueOf(ex.getStatusCode().value());
         String message = ex.getReason() != null ? ex.getReason() : status.getReasonPhrase();
         return ResponseEntity.status(status)
+                .contentType(MediaType.APPLICATION_JSON)
                 .header("Retry-After", String.valueOf(ex.retryAfterSeconds()))
                 .body(new ApiErrorResponse(
                         Instant.now(),
@@ -115,6 +131,9 @@ public class GlobalExceptionHandler {
                 request.getRequestURI(),
                 null
         );
-        return ResponseEntity.status(status).body(body);
+        // Força JSON mesmo quando o endpoint negociou text/event-stream (SSE).
+        return ResponseEntity.status(status)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(body);
     }
 }

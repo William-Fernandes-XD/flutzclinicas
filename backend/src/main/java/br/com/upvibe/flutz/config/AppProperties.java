@@ -43,7 +43,14 @@ public record AppProperties(
     public record Database(String host, String name) {
     }
 
-    public record Mercadopago(String publicKey, String accessToken, String webhookSecret) {
+    public record Mercadopago(
+            String publicKey,
+            String accessToken,
+            String webhookSecret,
+            String clientId,
+            String clientSecret,
+            String redirectUri
+    ) {
     }
 
     public boolean production() {
@@ -71,6 +78,14 @@ public record AppProperties(
         return mercadopago != null
                 && hasText(mercadopago.publicKey())
                 && hasText(mercadopago.accessToken());
+    }
+
+    /** Credenciais da aplicação OAuth (Connect) para clínicas vincularem a própria conta. */
+    public boolean mercadoPagoOAuthConfigured() {
+        return mercadopago != null
+                && hasText(mercadopago.clientId())
+                && hasText(mercadopago.clientSecret())
+                && hasText(mercadopago.redirectUri());
     }
 
     public static boolean hasText(String value) {
