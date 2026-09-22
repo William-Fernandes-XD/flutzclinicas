@@ -14,6 +14,7 @@ import java.time.Instant;
 import java.util.Base64;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
 
 import org.slf4j.Logger;
@@ -284,10 +285,7 @@ public class MercadoPagoOAuthService {
             HttpResponse<String> response = HTTP.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
                 log.warn("OAuth token MP HTTP {}: {}", response.statusCode(), truncar(response.body()));
-                throw new ResponseStatusException(
-                        HttpStatus.BAD_GATEWAY,
-                        "Não foi possível conectar sua conta Mercado Pago. Tente novamente."
-                );
+                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, mensagemErroToken(response.body()));
             }
             JsonNode node = json.readTree(response.body());
             String access = text(node, "access_token");
@@ -581,6 +579,23 @@ public class MercadoPagoOAuthService {
 
     private static String urlEncode(String value) {
         return URLEncoder.encode(value, StandardCharsets.UTF_8);
+    }
+
+    private static String mensagemErroToken(String body) {
+        String lower = body == null ? "" : body.toLowerCase(Locale.ROOT);
+        if (lower.contains("redirect_uri") || lower.contains("redirect uri")) {
+            return "Redirect URI do servidor não confere com a cadastrada no Mercado Pago. Use https://flutzclinicas.com.br/api/public/mercadopago/oauth/callback";
+        }
+        if (lower.contains("invalid_client") || lower.contains("client_id") || lower.contains("client_secret")) {
+            return "Client ID ou Client Secret inválidos no servidor. Confira Detalhes da aplicação no painel MP.";
+        }
+        if (lower.contains("invalid_grant") || lower.contains("authorization code")) {
+            return "Código de autorização inválido ou já usado. Clique em Conectar de novo (não recarregue a página do callback).";
+        }
+        if (lower.contains("code_verifier") || lower.contains("pkce")) {
+            return "Falha no PKCE. Confirme que o app no Mercado Pago está com authorization code + PKCE habilitado.";
+        }
+        return "Não foi possível conectar sua conta Mercado Pago. Tente novamente.";
     }
 
     private static String truncar(String body) {
