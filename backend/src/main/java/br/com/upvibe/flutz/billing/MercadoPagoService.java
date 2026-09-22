@@ -7,6 +7,10 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
@@ -19,8 +23,11 @@ import org.springframework.web.server.ResponseStatusException;
 
 import com.mercadopago.MercadoPagoConfig;
 import com.mercadopago.client.common.IdentificationRequest;
+import com.mercadopago.client.payment.PaymentAdditionalInfoPayerRequest;
+import com.mercadopago.client.payment.PaymentAdditionalInfoRequest;
 import com.mercadopago.client.payment.PaymentClient;
 import com.mercadopago.client.payment.PaymentCreateRequest;
+import com.mercadopago.client.payment.PaymentItemRequest;
 import com.mercadopago.client.payment.PaymentPayerRequest;
 import com.mercadopago.core.MPRequestOptions;
 import com.mercadopago.exceptions.MPApiException;
@@ -34,6 +41,9 @@ public class MercadoPagoService {
 
     private static final Logger log = LoggerFactory.getLogger(MercadoPagoService.class);
     private static final HttpClient HTTP = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(8)).build();
+    /** Nome no extrato do cartão (máx. ~13–22 chars no BR). */
+    private static final String STATEMENT_DESCRIPTOR = "FLUTZ ASSINATURA";
+    private static final String ITEM_CATEGORY = "services";
 
     private final AppProperties properties;
     private final PaymentClient paymentClient = new PaymentClient();
@@ -119,11 +129,13 @@ public class MercadoPagoService {
             PaymentCreateRequest request = PaymentCreateRequest.builder()
                     .transactionAmount(money(valor))
                     .description(descricao)
+                    .statementDescriptor(STATEMENT_DESCRIPTOR)
                     .paymentMethodId("pix")
                     .externalReference(referencia)
                     .payer(payer(pagador))
+                    .additionalInfo(additionalInfo(descricao, valor, pagador))
                     .build();
-            return paymentClient.create(request, options(token));
+            return paymentClient.create(request, options(token, pagador.deviceId()));
         } catch (ResponseStatusException ex) {
             throw ex;
         } catch (MPApiException ex) {
@@ -140,27 +152,28 @@ public class MercadoPagoService {
 
     public Payment criarCartao(BigDecimal valor, String descricao, String referencia, CardPaymentRequest card, String accessToken) {
         String token = resolverToken(accessToken);
+        Pagador pagador = new Pagador(
+                card.payerName(),
+                card.payerEmail(),
+                card.payerCpf(),
+                card.deviceId(),
+                card.registrationDate()
+        );
         try {
             PaymentCreateRequest.PaymentCreateRequestBuilder builder = PaymentCreateRequest.builder()
                     .transactionAmount(money(valor))
                     .description(descricao)
+                    .statementDescriptor(STATEMENT_DESCRIPTOR)
                     .token(card.token())
                     .installments(card.installments() == null ? 1 : card.installments())
                     .paymentMethodId(card.paymentMethodId())
                     .externalReference(referencia)
-                    .payer(PaymentPayerRequest.builder()
-                            .email(card.payerEmail())
-                            .firstName(primeiroNome(card.payerName()))
-                            .lastName(ultimoNome(card.payerName()))
-                            .identification(IdentificationRequest.builder()
-                                    .type("CPF")
-                                    .number(soDigitos(card.payerCpf()))
-                                    .build())
-                            .build());
+                    .payer(payer(pagador))
+                    .additionalInfo(additionalInfo(descricao, valor, pagador));
             if (card.issuerId() != null && !card.issuerId().isBlank()) {
                 builder.issuerId(card.issuerId());
             }
-            return paymentClient.create(builder.build(), options(token));
+            return paymentClient.create(builder.build(), options(token, card.deviceId()));
         } catch (ResponseStatusException ex) {
             throw ex;
         } catch (MPApiException ex) {
@@ -178,7 +191,7 @@ public class MercadoPagoService {
     public Payment consultar(String paymentId, String accessToken) {
         String token = resolverToken(accessToken);
         try {
-            return paymentClient.get(Long.parseLong(paymentId), options(token));
+            return paymentClient.get(Long.parseLong(paymentId), options(token, null));
         } catch (ResponseStatusException ex) {
             throw ex;
         } catch (MPApiException ex) {
@@ -186,6 +199,28 @@ public class MercadoPagoService {
         } catch (Exception ex) {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Não foi possível consultar o pagamento.");
         }
+    }
+
+    private PaymentAdditionalInfoRequest additionalInfo(String descricao, BigDecimal valor, Pagador pagador) {
+        PaymentItemRequest item = PaymentItemRequest.builder()
+                .id("flutz-mensalidade")
+                .title(descricao == null || descricao.isBlank() ? "Mensalidade Flutz" : descricao)
+                .description("Assinatura SaaS Flutz")
+                .categoryId(ITEM_CATEGORY)
+                .quantity(1)
+                .unitPrice(money(valor))
+                .build();
+        PaymentAdditionalInfoPayerRequest.PaymentAdditionalInfoPayerRequestBuilder payerInfo =
+                PaymentAdditionalInfoPayerRequest.builder()
+                        .firstName(primeiroNome(pagador.nome()))
+                        .lastName(ultimoNome(pagador.nome()));
+        if (pagador.registrationDate() != null) {
+            payerInfo.registrationDate(pagador.registrationDate());
+        }
+        return PaymentAdditionalInfoRequest.builder()
+                .items(List.of(item))
+                .payer(payerInfo.build())
+                .build();
     }
 
     private String resolverToken(String accessToken) {
@@ -202,10 +237,15 @@ public class MercadoPagoService {
         return limparKey(properties.mercadopago().accessToken());
     }
 
-    private MPRequestOptions options(String accessToken) {
+    private MPRequestOptions options(String accessToken, String deviceId) {
+        Map<String, String> headers = new HashMap<>();
+        headers.put("X-Idempotency-Key", UUID.randomUUID().toString());
+        if (deviceId != null && !deviceId.isBlank()) {
+            headers.put("X-meli-session-id", deviceId.trim());
+        }
         return MPRequestOptions.builder()
                 .accessToken(accessToken)
-                .customHeaders(Map.of("X-Idempotency-Key", UUID.randomUUID().toString()))
+                .customHeaders(headers)
                 .build();
     }
 
@@ -214,10 +254,19 @@ public class MercadoPagoService {
         int status = ex.getStatusCode();
         log.error("Erro Mercado Pago ({}) HTTP {}: {}", contexto, status, body);
         String detalhe = extrairMensagem(body);
+        String lower = body == null ? "" : body.toLowerCase(Locale.ROOT);
+        if (lower.contains("live credentials")) {
+            return new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "O Mercado Pago rejeitou as 'Credenciais de teste' do aplicativo (não criam pagamento). Use as chaves de produção de uma conta vendedor de teste (Contas de teste no painel), ou as de produção do app."
+            );
+        }
         if (status == 401 || status == 403) {
             return new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
-                    "Credenciais da clínica rejeitadas pelo Mercado Pago. Conecte a conta novamente em Financeiro."
+                    detalhe != null && !detalhe.isBlank()
+                            ? "Mercado Pago recusou as credenciais: " + detalhe
+                            : "Credenciais do Mercado Pago inválidas ou sem permissão. Confira MERCADOPAGO_PUBLIC_KEY e MERCADOPAGO_ACCESS_TOKEN no .env."
             );
         }
         if (detalhe != null && !detalhe.isBlank()) {
@@ -246,7 +295,6 @@ public class MercadoPagoService {
         if (lower.contains("payer") && lower.contains("email")) {
             return "E-mail do pagador inválido";
         }
-        // tenta message do JSON de forma simples
         int idx = body.indexOf("\"message\"");
         if (idx >= 0) {
             int start = body.indexOf(':', idx);
@@ -308,7 +356,16 @@ public class MercadoPagoService {
         return value == null ? "" : value.replaceAll("\\D", "");
     }
 
-    public record Pagador(String nome, String email, String cpf) {
+    public record Pagador(
+            String nome,
+            String email,
+            String cpf,
+            String deviceId,
+            OffsetDateTime registrationDate
+    ) {
+        public Pagador(String nome, String email, String cpf) {
+            this(nome, email, cpf, null, null);
+        }
     }
 
     public record CardPaymentRequest(
@@ -318,7 +375,23 @@ public class MercadoPagoService {
             String issuerId,
             String payerEmail,
             String payerName,
-            String payerCpf
+            String payerCpf,
+            String deviceId,
+            OffsetDateTime registrationDate
     ) {
+        public CardPaymentRequest(
+                String token,
+                String paymentMethodId,
+                Integer installments,
+                String issuerId,
+                String payerEmail,
+                String payerName,
+                String payerCpf
+        ) {
+            this(token, paymentMethodId, installments, issuerId, payerEmail, payerName, payerCpf, null, null);
+        }
+    }
+
+    public record DevicePayload(String deviceId) {
     }
 }

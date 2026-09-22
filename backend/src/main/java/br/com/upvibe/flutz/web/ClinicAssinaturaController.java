@@ -55,8 +55,8 @@ public class ClinicAssinaturaController {
     }
 
     @PostMapping("/pagar/pix")
-    public SubscriptionPaymentService.PaymentResult pagarPix() {
-        return payments.pagarPix();
+    public SubscriptionPaymentService.PaymentResult pagarPix(@RequestBody(required = false) MercadoPagoService.DevicePayload body) {
+        return payments.pagarPix(body);
     }
 
     @PostMapping("/pagar/cartao")

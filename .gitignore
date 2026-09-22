@@ -39,3 +39,5 @@ backend/secrets/*.json
 infrastructure/kubernetes/secret.yaml
 contas-dev.md
 login-me.json
+mp-test-seller.json
+mp-test-buyer.json

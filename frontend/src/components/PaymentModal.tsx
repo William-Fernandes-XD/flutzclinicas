@@ -65,6 +65,47 @@ function loadMercadoPagoSdk(): Promise<void> {
   });
 }
 
+/** Device ID do security.js — melhora aprovação e atende critério de qualidade do MP. */
+function loadMercadoPagoDeviceId(): Promise<string | null> {
+  const existingId = window.MP_DEVICE_SESSION_ID;
+  if (existingId && String(existingId).trim()) {
+    return Promise.resolve(String(existingId).trim());
+  }
+  const existing = document.querySelector('script[data-mp-security="v2"]');
+  const waitForId = (timeoutMs = 2500): Promise<string | null> =>
+    new Promise((resolve) => {
+      const started = Date.now();
+      const tick = () => {
+        const id = window.MP_DEVICE_SESSION_ID;
+        if (id && String(id).trim()) {
+          resolve(String(id).trim());
+          return;
+        }
+        if (Date.now() - started >= timeoutMs) {
+          resolve(null);
+          return;
+        }
+        window.setTimeout(tick, 80);
+      };
+      tick();
+    });
+  if (existing) {
+    return waitForId();
+  }
+  return new Promise((resolve) => {
+    const script = document.createElement("script");
+    script.src = "https://www.mercadopago.com/v2/security.js";
+    script.async = true;
+    script.dataset.mpSecurity = "v2";
+    script.setAttribute("view", "checkout");
+    script.onload = () => {
+      void waitForId().then(resolve);
+    };
+    script.onerror = () => resolve(null);
+    document.body.appendChild(script);
+  });
+}
+
 export function PaymentModal({
   onPaid,
   onClose,
@@ -144,7 +185,12 @@ export function PaymentCheckout({
   }, [cpf]);
 
   const mensalidade = useQuery({ queryKey: ["clinica", "mensalidade"], queryFn: api.mensalidade });
-  const mpConfig = useQuery({ queryKey: ["mp-config"], queryFn: api.pagamentoConfig });
+  const mpConfig = useQuery({
+    queryKey: ["mp-config"],
+    queryFn: api.pagamentoConfig,
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
 
   const handlePaid = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ["clinica", "mensalidade"] });
@@ -181,6 +227,10 @@ export function PaymentCheckout({
     }
   }
 
+  useEffect(() => {
+    void loadMercadoPagoDeviceId();
+  }, []);
+
   const payWithCardToken = useCallback(async (formData: MercadoPagoCardForm) => {
     setError("");
     setLoading(true);
@@ -203,6 +253,7 @@ export function PaymentCheckout({
       if (onlyDigits(payerCpf).length !== 11) {
         throw new Error("Informe um CPF válido com 11 dígitos.");
       }
+      const deviceId = await loadMercadoPagoDeviceId();
       const res = await api.pagarCartao({
         token,
         paymentMethodId,
@@ -211,6 +262,7 @@ export function PaymentCheckout({
         payerEmail: formData?.payer?.email || session?.identificador,
         payerName: session?.nome || formData?.payer?.email || "Clínica",
         payerCpf: formatCpf(payerCpf),
+        deviceId,
       });
       if (res.paid) {
         handlePaid();
@@ -351,7 +403,8 @@ export function PaymentCheckout({
     }
     setLoading(true);
     try {
-      const res = await api.pagarPix();
+      const deviceId = await loadMercadoPagoDeviceId();
+      const res = await api.pagarPix({ deviceId });
       setPixData(res);
       setStep("pay");
       if (res.paid) handlePaid();

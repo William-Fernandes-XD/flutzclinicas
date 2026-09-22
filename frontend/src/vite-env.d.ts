@@ -19,6 +19,7 @@ interface ImportMeta {
 }
 
 interface Window {
+  MP_DEVICE_SESSION_ID?: string;
   MercadoPago?: new (publicKey: string, options?: { locale?: string }) => {
     bricks: () => {
       create: (type: string, containerId: string, options: Record<string, unknown>) => Promise<{ unmount?: () => Promise<void> }>;

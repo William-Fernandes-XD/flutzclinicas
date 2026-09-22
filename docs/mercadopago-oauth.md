@@ -89,17 +89,45 @@ No painel da aplicação → **Detalhes da aplicação**:
 
 Também cadastre a Redirect URI **idêntica** em: edição da aplicação → URLs de redirecionamento.
 
-Se a aplicação tiver **PKCE** habilitado, desative por enquanto (o Flutz usa OAuth clássico sem PKCE).
+O Flutz envia **PKCE (S256)** no Connect. Se no painel existir a opção *Usar o fluxo de authorization code com PKCE*, deixe **ligada** (recomendado). Se estiver desligada, o MP costuma aceitar os parâmetros mesmo assim.
 
-## Configuração externa obrigatória (painel Mercado Pago)
+Se aparecer **"O aplicativo não está pronto para se conectar a Mercado Pago"**:
 
-Estas etapas **não** podem ser automatizadas pelo código:
+1. Abra [Suas integrações](https://www.mercadopago.com.br/developers/panel/app) → app cujo **Número** = `MERCADOPAGO_CLIENT_ID`.
+2. **Editar** e preencha os dados obrigatórios (nome, descrição, indústria, solução = pagamentos online / Checkout Transparente).
+3. Em **Configurações avançadas**, cadastre a **Redirect URL** exatamente igual a `MERCADOPAGO_REDIRECT_URI` (mesmo protocolo, host, porta e path — sem barra no final a mais).
+4. Salve, aguarde alguns segundos e tente **Conectar** de novo.
 
-1. Criar/usar o **aplicativo** do Flutz no [Mercado Pago Developers](https://www.mercadopago.com.br/developers).
-2. Copiar **Client ID** e **Client Secret** para as variáveis acima.
-3. Cadastrar a **Redirect URI** exatamente igual a `MERCADOPAGO_REDIRECT_URI`.
-4. Manter o webhook da plataforma apontando para `{APP_URL}/api/public/mercadopago/webhook` (mensalidade + agendamentos).
+## Produção (flutzclinicas.com.br)
+
+| Peça | Valor |
+| --- | --- |
+| Frontend (Vercel) | `https://flutzclinicas.com.br` |
+| API | `https://api.flutzclinicas.com.br` |
+| Redirect OAuth (preferida) | `https://flutzclinicas.com.br/api/public/mercadopago/oauth/callback` |
+| Redirect OAuth (direto na API) | `https://api.flutzclinicas.com.br/api/public/mercadopago/oauth/callback` |
+
+### Por que “página não existe” no callback
+
+O domínio do site é a **Vercel** (SPA). Sem proxy, `/api/...` vira `index.html` e a rota Spring nunca roda.
+
+O `frontend/vercel.json` encaminha `/api/*` → `https://api.flutzclinicas.com.br/api/*`. **É preciso publicar o frontend** depois dessa alteração.
+
+### Checklist produção
+
+1. No servidor da API, use o modelo `.env.production.example`:
+   - `APP_URL=https://api.flutzclinicas.com.br`
+   - `FRONTEND_URL=https://flutzclinicas.com.br`
+   - `MERCADOPAGO_REDIRECT_URI=https://flutzclinicas.com.br/api/public/mercadopago/oauth/callback`
+   - Client ID / Secret / Public Key / Access Token de **produção**
+2. No painel MP, cadastre **exatamente** essa Redirect URL (pode cadastrar as duas: site + `api.`).
+3. Redeploy da Vercel com o `vercel.json` atualizado.
+4. Teste: `https://flutzclinicas.com.br/api/public/health-message` deve responder JSON `{"status":"ok"}` (não HTML).
+5. Em **Financeiro → Conectar Mercado Pago** pelo site de produção.
+
+Localmente continue com `http://localhost:5173/api/public/mercadopago/oauth/callback` no `.env` e no painel (segunda URL).
 
 ## Migration
 
 `V30__mercadopago_oauth.sql` — colunas OAuth em `conta_pagamento` + tabela `mercadopago_oauth_state`.
+`V31__mercadopago_oauth_pkce.sql` — PKCE (`code_verifier`).

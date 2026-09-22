@@ -96,7 +96,8 @@ export const api = {
   aplicarTokenAssinatura: (codigo: string) =>
     http<Mensalidade>("/api/assinatura/token", { method: "POST", json: { codigo } }),
   pagamentoConfig: () => http<{ publicKey: string | null }>("/api/assinatura/pagamento/config"),
-  pagarPix: () => http<PaymentResult>("/api/assinatura/pagar/pix", { method: "POST" }),
+  pagarPix: (body?: { deviceId?: string | null }) =>
+    http<PaymentResult>("/api/assinatura/pagar/pix", { method: "POST", json: body ?? {} }),
   pagarCartao: (body: CardPaymentBody) =>
     http<PaymentResult>("/api/assinatura/pagar/cartao", { method: "POST", json: body }),
   statusPagamento: () => http<PaymentResult>("/api/assinatura/pagamento"),
@@ -405,6 +406,7 @@ export type CardPaymentBody = {
   payerEmail?: string;
   payerName?: string;
   payerCpf: string;
+  deviceId?: string | null;
 };
 
 export type PaymentResult = {
