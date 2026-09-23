@@ -167,6 +167,11 @@ public class MercadoPagoOAuthService {
                     ? "Não foi possível conectar sua conta Mercado Pago. Tente novamente."
                     : ex.getReason();
             return CallbackResult.redirect(base + "?mp=erro&motivo=" + urlEncode(msg));
+        } catch (org.springframework.dao.DataIntegrityViolationException ex) {
+            log.error("Falha ao gravar conta OAuth MP empresa={}: {}", stateRow.empresaId(), ex.getMostSpecificCause().getMessage());
+            return CallbackResult.redirect(base + "?mp=erro&motivo=" + urlEncode(
+                    "Não foi possível salvar a conexão (dado grande demais no banco). Atualize o servidor e tente de novo."
+            ));
         } catch (Exception ex) {
             log.error("Erro inesperado no callback OAuth MP: {}", ex.getMessage(), ex);
             return CallbackResult.redirect(base + "?mp=erro&motivo=" + urlEncode(
