@@ -41,8 +41,6 @@ public class MercadoPagoService {
 
     private static final Logger log = LoggerFactory.getLogger(MercadoPagoService.class);
     private static final HttpClient HTTP = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(8)).build();
-    /** Nome no extrato do cartão (máx. ~13–22 chars no BR). */
-    private static final String STATEMENT_DESCRIPTOR = "FLUTZ ASSINATURA";
     private static final String ITEM_CATEGORY = "services";
 
     private final AppProperties properties;
@@ -120,22 +118,37 @@ public class MercadoPagoService {
     }
 
     public Payment criarPix(BigDecimal valor, String descricao, String referencia, Pagador pagador) {
-        return criarPix(valor, descricao, referencia, pagador, null);
+        return criarPix(valor, descricao, referencia, pagador, null, ContextoPagamento.ASSINATURA);
     }
 
     public Payment criarPix(BigDecimal valor, String descricao, String referencia, Pagador pagador, String accessToken) {
+        return criarPix(valor, descricao, referencia, pagador, accessToken, ContextoPagamento.AGENDAMENTO);
+    }
+
+    public Payment criarPix(
+            BigDecimal valor,
+            String descricao,
+            String referencia,
+            Pagador pagador,
+            String accessToken,
+            ContextoPagamento contexto
+    ) {
         String token = resolverToken(accessToken);
+        ContextoPagamento ctx = contexto == null ? ContextoPagamento.ASSINATURA : contexto;
         try {
-            PaymentCreateRequest request = PaymentCreateRequest.builder()
+            PaymentCreateRequest.PaymentCreateRequestBuilder builder = PaymentCreateRequest.builder()
                     .transactionAmount(money(valor))
                     .description(descricao)
-                    .statementDescriptor(STATEMENT_DESCRIPTOR)
+                    .statementDescriptor(ctx.statementDescriptor())
                     .paymentMethodId("pix")
                     .externalReference(referencia)
                     .payer(payer(pagador))
-                    .additionalInfo(additionalInfo(descricao, valor, pagador))
-                    .build();
-            return paymentClient.create(request, options(token, pagador.deviceId()));
+                    .additionalInfo(additionalInfo(descricao, valor, pagador, ctx));
+            BigDecimal fee = applicationFee(ctx, valor);
+            if (fee != null) {
+                builder.applicationFee(fee);
+            }
+            return paymentClient.create(builder.build(), options(token, pagador.deviceId()));
         } catch (ResponseStatusException ex) {
             throw ex;
         } catch (MPApiException ex) {
@@ -147,11 +160,23 @@ public class MercadoPagoService {
     }
 
     public Payment criarCartao(BigDecimal valor, String descricao, String referencia, CardPaymentRequest card) {
-        return criarCartao(valor, descricao, referencia, card, null);
+        return criarCartao(valor, descricao, referencia, card, null, ContextoPagamento.ASSINATURA);
     }
 
     public Payment criarCartao(BigDecimal valor, String descricao, String referencia, CardPaymentRequest card, String accessToken) {
+        return criarCartao(valor, descricao, referencia, card, accessToken, ContextoPagamento.AGENDAMENTO);
+    }
+
+    public Payment criarCartao(
+            BigDecimal valor,
+            String descricao,
+            String referencia,
+            CardPaymentRequest card,
+            String accessToken,
+            ContextoPagamento contexto
+    ) {
         String token = resolverToken(accessToken);
+        ContextoPagamento ctx = contexto == null ? ContextoPagamento.ASSINATURA : contexto;
         Pagador pagador = new Pagador(
                 card.payerName(),
                 card.payerEmail(),
@@ -163,15 +188,19 @@ public class MercadoPagoService {
             PaymentCreateRequest.PaymentCreateRequestBuilder builder = PaymentCreateRequest.builder()
                     .transactionAmount(money(valor))
                     .description(descricao)
-                    .statementDescriptor(STATEMENT_DESCRIPTOR)
+                    .statementDescriptor(ctx.statementDescriptor())
                     .token(card.token())
                     .installments(card.installments() == null ? 1 : card.installments())
                     .paymentMethodId(card.paymentMethodId())
                     .externalReference(referencia)
                     .payer(payer(pagador))
-                    .additionalInfo(additionalInfo(descricao, valor, pagador));
+                    .additionalInfo(additionalInfo(descricao, valor, pagador, ctx));
             if (card.issuerId() != null && !card.issuerId().isBlank()) {
                 builder.issuerId(card.issuerId());
+            }
+            BigDecimal fee = applicationFee(ctx, valor);
+            if (fee != null) {
+                builder.applicationFee(fee);
             }
             return paymentClient.create(builder.build(), options(token, card.deviceId()));
         } catch (ResponseStatusException ex) {
@@ -201,11 +230,32 @@ public class MercadoPagoService {
         }
     }
 
-    private PaymentAdditionalInfoRequest additionalInfo(String descricao, BigDecimal valor, Pagador pagador) {
+    private BigDecimal applicationFee(ContextoPagamento ctx, BigDecimal valor) {
+        if (ctx != ContextoPagamento.AGENDAMENTO || properties.mercadopago() == null) {
+            return null;
+        }
+        BigDecimal fee = properties.mercadopago().marketplaceFeeOrZero();
+        if (fee == null) {
+            return null;
+        }
+        BigDecimal max = money(valor);
+        if (fee.compareTo(max) >= 0) {
+            log.warn("application_fee {} >= valor {}; ignorando taxa marketplace", fee, max);
+            return null;
+        }
+        return money(fee);
+    }
+
+    private PaymentAdditionalInfoRequest additionalInfo(
+            String descricao,
+            BigDecimal valor,
+            Pagador pagador,
+            ContextoPagamento ctx
+    ) {
         PaymentItemRequest item = PaymentItemRequest.builder()
-                .id("flutz-mensalidade")
-                .title(descricao == null || descricao.isBlank() ? "Mensalidade Flutz" : descricao)
-                .description("Assinatura SaaS Flutz")
+                .id(ctx.itemId())
+                .title(descricao == null || descricao.isBlank() ? ctx.itemTitleFallback() : descricao)
+                .description(ctx.itemDescription())
                 .categoryId(ITEM_CATEGORY)
                 .quantity(1)
                 .unitPrice(money(valor))
@@ -393,5 +443,39 @@ public class MercadoPagoService {
     }
 
     public record DevicePayload(String deviceId) {
+    }
+
+    /** Distingue mensalidade (plataforma) de agendamento (token OAuth da clínica). */
+    public enum ContextoPagamento {
+        ASSINATURA("FLUTZ ASSINATURA", "flutz-mensalidade", "Assinatura SaaS Flutz", "Mensalidade Flutz"),
+        AGENDAMENTO("FLUTZ CLINICA", "flutz-agendamento", "Agendamento Flutz", "Agendamento Flutz");
+
+        private final String statementDescriptor;
+        private final String itemId;
+        private final String itemDescription;
+        private final String itemTitleFallback;
+
+        ContextoPagamento(String statementDescriptor, String itemId, String itemDescription, String itemTitleFallback) {
+            this.statementDescriptor = statementDescriptor;
+            this.itemId = itemId;
+            this.itemDescription = itemDescription;
+            this.itemTitleFallback = itemTitleFallback;
+        }
+
+        String statementDescriptor() {
+            return statementDescriptor;
+        }
+
+        String itemId() {
+            return itemId;
+        }
+
+        String itemDescription() {
+            return itemDescription;
+        }
+
+        String itemTitleFallback() {
+            return itemTitleFallback;
+        }
     }
 }

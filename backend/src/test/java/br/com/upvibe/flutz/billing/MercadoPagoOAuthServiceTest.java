@@ -73,17 +73,34 @@ class MercadoPagoOAuthServiceTest {
 
         MercadoPagoOAuthService.ConnectStart start = oauth.iniciarConexao();
 
-        assertTrue(start.authorizationUrl().startsWith("https://auth.mercadopago.com.br/authorization"));
+        assertTrue(start.authorizationUrl().startsWith("https://auth.mercadopago.com/authorization"));
         assertTrue(start.authorizationUrl().contains("client_id=client-id-test"));
         assertTrue(start.authorizationUrl().contains("response_type=code"));
         assertTrue(start.authorizationUrl().contains("state="));
         assertTrue(start.authorizationUrl().contains("platform_id=mp"));
-        assertTrue(start.authorizationUrl().contains("code_challenge="));
-        assertTrue(start.authorizationUrl().contains("code_challenge_method=S256"));
+        assertFalse(start.authorizationUrl().contains("code_challenge="));
         assertEquals(
                 "http://localhost:8080/api/public/mercadopago/oauth/callback",
                 start.redirectUri()
         );
+        verify(jdbc).update(anyString(), any(), eq(5), eq(10), any(Timestamp.class), any());
+    }
+
+    @Test
+    void iniciarConexaoComPkceQuandoHabilitado() {
+        properties = props("client-id-test", "client-secret-test",
+                "http://localhost:8080/api/public/mercadopago/oauth/callback", true);
+        oauth = new MercadoPagoOAuthService(jdbc, clinic, properties, new ObjectMapper());
+        autenticarAdmin(5, 10);
+        Empresa empresa = mock(Empresa.class);
+        when(empresa.getId()).thenReturn(5);
+        when(clinic.empresaAtual()).thenReturn(empresa);
+        when(jdbc.update(anyString(), any(), any(), any(), any(), any())).thenReturn(1);
+
+        MercadoPagoOAuthService.ConnectStart start = oauth.iniciarConexao();
+
+        assertTrue(start.authorizationUrl().contains("code_challenge="));
+        assertTrue(start.authorizationUrl().contains("code_challenge_method=S256"));
         verify(jdbc).update(anyString(), any(), eq(5), eq(10), any(Timestamp.class), anyString());
     }
 
@@ -151,6 +168,10 @@ class MercadoPagoOAuthServiceTest {
     }
 
     private static AppProperties props(String clientId, String clientSecret, String redirect) {
+        return props(clientId, clientSecret, redirect, false);
+    }
+
+    private static AppProperties props(String clientId, String clientSecret, String redirect, boolean pkce) {
         return new AppProperties(
                 new AppProperties.App("Flutz", "test", "http://localhost:8080", "http://localhost:5173"),
                 null,
@@ -160,7 +181,9 @@ class MercadoPagoOAuthServiceTest {
                 null,
                 null,
                 null,
-                new AppProperties.Mercadopago("TEST-pk", "TEST-at", "whsec", clientId, clientSecret, redirect, false)
+                new AppProperties.Mercadopago(
+                        "TEST-pk", "TEST-at", "whsec", clientId, clientSecret, redirect, pkce, null
+                )
         );
     }
 }

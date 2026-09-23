@@ -116,6 +116,11 @@ public class ClinicBookingPaymentService {
 
     @Transactional
     public PaymentResult pagarPix(Integer agendamentoId) {
+        return pagarPix(agendamentoId, null);
+    }
+
+    @Transactional
+    public PaymentResult pagarPix(Integer agendamentoId, String deviceId) {
         AgendaService.Solicitacao item = agenda.detalhe(agendamentoId);
         exigirTutorDono(item);
         exigirAguardandoPagamento(item);
@@ -137,13 +142,21 @@ public class ClinicBookingPaymentService {
                 return fromPayment(item, valores, existente, "PIX");
             }
         }
-        MercadoPagoService.Pagador pagador = pagadorTutor();
+        MercadoPagoService.Pagador base = pagadorTutor();
+        MercadoPagoService.Pagador pagador = new MercadoPagoService.Pagador(
+                base.nome(),
+                base.email(),
+                base.cpf(),
+                deviceId,
+                base.registrationDate()
+        );
         Payment payment = mercadoPago.criarPix(
                 valores.cobrado(),
                 "Agendamento Flutz — " + item.clinica(),
                 "FLUTZ-AGENDAMENTO-" + item.id(),
                 pagador,
-                conta.accessToken()
+                conta.accessToken(),
+                MercadoPagoService.ContextoPagamento.AGENDAMENTO
         );
         gravarProvider(pagamentoId, payment);
         aplicarStatusMp(item, pagamentoId, valores, payment);
@@ -173,14 +186,17 @@ public class ClinicBookingPaymentService {
                 card.issuerId(),
                 card.payerEmail() == null || card.payerEmail().isBlank() ? pagador.email() : card.payerEmail(),
                 card.payerName() == null || card.payerName().isBlank() ? pagador.nome() : card.payerName(),
-                card.payerCpf() == null || card.payerCpf().isBlank() ? pagador.cpf() : card.payerCpf()
+                card.payerCpf() == null || card.payerCpf().isBlank() ? pagador.cpf() : card.payerCpf(),
+                card.deviceId(),
+                card.registrationDate()
         );
         Payment payment = mercadoPago.criarCartao(
                 valores.cobrado(),
                 "Agendamento Flutz — " + item.clinica(),
                 "FLUTZ-AGENDAMENTO-" + item.id(),
                 completo,
-                conta.accessToken()
+                conta.accessToken(),
+                MercadoPagoService.ContextoPagamento.AGENDAMENTO
         );
         gravarProvider(pagamentoId, payment);
         aplicarStatusMp(item, pagamentoId, valores, payment);

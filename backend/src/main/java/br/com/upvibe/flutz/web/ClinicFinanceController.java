@@ -104,8 +104,11 @@ public class ClinicFinanceController {
     }
 
     @PostMapping("/agenda/solicitacoes/{id}/pagar/pix")
-    public ClinicBookingPaymentService.PaymentResult pagarPix(@PathVariable Integer id) {
-        return pagamentos.pagarPix(id);
+    public ClinicBookingPaymentService.PaymentResult pagarPix(
+            @PathVariable Integer id,
+            @RequestBody(required = false) MercadoPagoService.DevicePayload body
+    ) {
+        return pagamentos.pagarPix(id, body == null ? null : body.deviceId());
     }
 
     @PostMapping("/agenda/solicitacoes/{id}/pagar/cartao")

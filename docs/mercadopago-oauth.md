@@ -95,6 +95,13 @@ O Flutz envia OAuth no formato da [documentação oficial](https://www.mercadopa
 
 **PKCE** (`code_challenge`) só é enviado se `MERCADOPAGO_OAUTH_PKCE=true` **e** o app no painel tiver PKCE habilitado. Enviar PKCE com o app sem PKCE costuma gerar “não é possível conectar o aplicativo”.
 
+### Checkout Transparente (agendamentos)
+
+- Frontend usa a **public_key OAuth da clínica** (Bricks).
+- Backend cria `/v1/payments` com o **access_token OAuth da clínica**.
+- Opcional: `MERCADOPAGO_MARKETPLACE_APPLICATION_FEE` (BRL) → `application_fee` no pagamento. Vazio = valor integral para a clínica.
+- Device ID (`security.js`) é enviado em PIX e cartão do agendamento.
+
 Se aparecer **"O aplicativo não está pronto para se conectar a Mercado Pago"**:
 
 1. Abra [Suas integrações](https://www.mercadopago.com.br/developers/panel/app) → app cujo **Número** = `MERCADOPAGO_CLIENT_ID`.

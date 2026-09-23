@@ -51,10 +51,22 @@ public record AppProperties(
             String clientSecret,
             String redirectUri,
             /** Se true, envia PKCE (code_challenge). Só use se o app no painel MP tiver PKCE ligado. */
-            Boolean oauthPkce
+            Boolean oauthPkce,
+            /**
+             * Comissão fixa (BRL) do marketplace por pagamento de agendamento (application_fee).
+             * Null/0 = sem taxa Flutz (valor integral para a clínica).
+             */
+            java.math.BigDecimal marketplaceApplicationFee
     ) {
         public boolean oauthPkceEnabled() {
             return Boolean.TRUE.equals(oauthPkce);
+        }
+
+        public java.math.BigDecimal marketplaceFeeOrZero() {
+            if (marketplaceApplicationFee == null || marketplaceApplicationFee.signum() <= 0) {
+                return null;
+            }
+            return marketplaceApplicationFee;
         }
     }
 

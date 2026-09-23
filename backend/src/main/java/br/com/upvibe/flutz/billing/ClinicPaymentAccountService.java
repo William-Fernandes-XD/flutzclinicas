@@ -155,12 +155,13 @@ public class ClinicPaymentAccountService {
         if (authMode == null || authMode.isBlank()) {
             authMode = "manual";
         }
+        // publicKey é pública por design (Bricks/SDK); mascarada só para exibição admin.
         return new ContaView(
                 rs.getInt("conta_pagamento_id"),
                 rs.getString("provider"),
                 rs.getString("account_id"),
                 status,
-                null,
+                publicKey,
                 mascarar(publicKey),
                 rs.getString("nome_exibicao"),
                 connected == null ? null : connected.toInstant().toString(),

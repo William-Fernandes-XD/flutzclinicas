@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import br.com.upvibe.flutz.billing.ClinicBookingPaymentService;
 import br.com.upvibe.flutz.billing.MercadoPagoOAuthService;
+import br.com.upvibe.flutz.billing.MercadoPagoWebhookValidator;
 import br.com.upvibe.flutz.billing.SubscriptionPaymentService;
 
 @RestController
@@ -24,15 +25,18 @@ public class MercadoPagoWebhookController {
     private final SubscriptionPaymentService payments;
     private final ClinicBookingPaymentService bookingPayments;
     private final MercadoPagoOAuthService oauth;
+    private final MercadoPagoWebhookValidator webhookValidator;
 
     public MercadoPagoWebhookController(
             SubscriptionPaymentService payments,
             ClinicBookingPaymentService bookingPayments,
-            MercadoPagoOAuthService oauth
+            MercadoPagoOAuthService oauth,
+            MercadoPagoWebhookValidator webhookValidator
     ) {
         this.payments = payments;
         this.bookingPayments = bookingPayments;
         this.oauth = oauth;
+        this.webhookValidator = webhookValidator;
     }
 
     @PostMapping("/webhook")
@@ -43,6 +47,13 @@ public class MercadoPagoWebhookController {
             @RequestParam(value = "data.id", required = false) String dataId
     ) {
         Map<String, Object> body = payload == null ? Map.of() : payload;
+        String resolvedId = dataId;
+        if ((resolvedId == null || resolvedId.isBlank()) && body.get("data") instanceof Map<?, ?> data) {
+            Object raw = data.get("id");
+            resolvedId = raw == null ? null : String.valueOf(raw);
+        }
+        // Valida uma vez — assinatura e agendamento usam o mesmo endpoint.
+        webhookValidator.validar(xSignature, xRequestId, resolvedId);
         try {
             payments.webhook(body, xSignature, xRequestId, dataId);
         } catch (Exception ignored) {

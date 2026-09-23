@@ -69,6 +69,46 @@ function loadMercadoPagoSdk(): Promise<void> {
   });
 }
 
+/** Device ID do security.js — criterio de qualidade do MP. */
+function loadMercadoPagoDeviceId(): Promise<string | null> {
+  const existingId = window.MP_DEVICE_SESSION_ID;
+  if (existingId && String(existingId).trim()) {
+    return Promise.resolve(String(existingId).trim());
+  }
+  const existing = document.querySelector('script[data-mp-security="v2"]');
+  const waitForId = (timeoutMs = 2500): Promise<string | null> =>
+    new Promise((resolve) => {
+      const started = Date.now();
+      const tick = () => {
+        const id = window.MP_DEVICE_SESSION_ID;
+        if (id && String(id).trim()) {
+          resolve(String(id).trim());
+          return;
+        }
+        if (Date.now() - started >= timeoutMs) {
+          resolve(null);
+          return;
+        }
+        window.setTimeout(tick, 100);
+      };
+      tick();
+    });
+  if (existing) {
+    return waitForId();
+  }
+  return new Promise((resolve) => {
+    const script = document.createElement("script");
+    script.src = "https://www.mercadopago.com/v2/security.js";
+    script.async = true;
+    script.dataset.mpSecurity = "v2";
+    script.onload = () => {
+      void waitForId().then(resolve);
+    };
+    script.onerror = () => resolve(null);
+    document.body.appendChild(script);
+  });
+}
+
 export function BookingPaymentModal({
   agendamentoId,
   onPaid,
@@ -210,6 +250,7 @@ function BookingCheckout({
         if (onlyDigits(payerCpf).length !== 11) {
           throw new Error("Informe um CPF válido com 11 dígitos.");
         }
+        const deviceId = await loadMercadoPagoDeviceId();
         const body: CardPaymentBody = {
           token,
           paymentMethodId,
@@ -218,6 +259,7 @@ function BookingCheckout({
           payerEmail: formData?.payer?.email || session?.identificador,
           payerName: session?.nome || formData?.payer?.email || "Tutor",
           payerCpf: formatCpf(payerCpf),
+          deviceId,
         };
         const res = normalizePayment(await api.agendaPagarCartao(agendamentoId, body));
         if (res.paid) {
@@ -349,7 +391,8 @@ function BookingCheckout({
     setError("");
     setLoading(true);
     try {
-      const res = normalizePayment(await api.agendaPagarPix(agendamentoId));
+      const deviceId = await loadMercadoPagoDeviceId();
+      const res = normalizePayment(await api.agendaPagarPix(agendamentoId, { deviceId }));
       setPixData(res);
       if (res.paid) handlePaid();
     } catch (err) {

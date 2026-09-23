@@ -98,3 +98,5 @@ flutz:
     redirect-uri: ${MERCADOPAGO_REDIRECT_URI:${APP_URL:http://localhost:8080}/api/public/mercadopago/oauth/callback}
     # true somente se no painel MP estiver marcado "authorization code com PKCE"
     oauth-pkce: ${MERCADOPAGO_OAUTH_PKCE:false}
+    # Comissão marketplace (BRL) em pagamentos de agendamento; vazio = sem taxa
+    marketplace-application-fee: ${MERCADOPAGO_MARKETPLACE_APPLICATION_FEE:}

@@ -237,8 +237,11 @@ export const api = {
     http<AgendaCheckout>(`/api/agenda/solicitacoes/${id}/cupom/remover`, { method: "POST" }),
   agendaPagamentoConfig: (id: number) =>
     http<{ publicKey: string | null }>(`/api/agenda/solicitacoes/${id}/pagamento/config`),
-  agendaPagarPix: (id: number) =>
-    http<BookingPaymentResult>(`/api/agenda/solicitacoes/${id}/pagar/pix`, { method: "POST" }),
+  agendaPagarPix: (id: number, body?: { deviceId?: string | null }) =>
+    http<BookingPaymentResult>(`/api/agenda/solicitacoes/${id}/pagar/pix`, {
+      method: "POST",
+      json: body ?? {},
+    }),
   agendaPagarCartao: (id: number, body: CardPaymentBody) =>
     http<BookingPaymentResult>(`/api/agenda/solicitacoes/${id}/pagar/cartao`, { method: "POST", json: body }),
   agendaStatusPagamento: (id: number) =>

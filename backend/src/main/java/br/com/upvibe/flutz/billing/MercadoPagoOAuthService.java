@@ -106,7 +106,7 @@ public class MercadoPagoOAuthService {
         }
         String appUrl = properties.app() != null && AppProperties.hasText(properties.app().url())
                 ? properties.app().url().trim().replaceAll("/+$", "")
-                : "http://localhost:8081";
+                : "http://localhost:8080";
         return appUrl + "/api/public/mercadopago/oauth/callback";
     }
 
@@ -271,7 +271,7 @@ public class MercadoPagoOAuthService {
         if (AppProperties.hasText(codeVerifier)) {
             fields.put("code_verifier", codeVerifier);
         }
-        return postToken(form(fields));
+        return postToken(form(fields), true);
     }
 
     private TokenResponse renovarToken(String refreshToken) {
@@ -284,10 +284,10 @@ public class MercadoPagoOAuthService {
                         "refresh_token", refreshToken
                 )
         );
-        return postToken(body);
+        return postToken(body, true);
     }
 
-    private TokenResponse postToken(String formBody) {
+    private TokenResponse postToken(String formBody, boolean exigirRefresh) {
         try {
             Map<String, String> asMap = new LinkedHashMap<>();
             for (String part : formBody.split("&")) {
@@ -335,6 +335,12 @@ public class MercadoPagoOAuthService {
                 );
             }
             String refresh = text(node, "refresh_token");
+            if (exigirRefresh && !AppProperties.hasText(refresh)) {
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_GATEWAY,
+                        "O Mercado Pago não retornou refresh_token (offline_access). Reconecte a conta."
+                );
+            }
             String publicKey = text(node, "public_key");
             String userId = node.hasNonNull("user_id") ? node.get("user_id").asText() : null;
             String scope = text(node, "scope");
@@ -411,11 +417,18 @@ public class MercadoPagoOAuthService {
     }
 
     private void persistirConexao(Integer empresaId, TokenResponse tokens) {
+        if (!AppProperties.hasText(tokens.refreshToken())) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_GATEWAY,
+                    "O Mercado Pago não retornou refresh_token. Verifique se o app tem offline_access e tente de novo."
+            );
+        }
         String publicKey = tokens.publicKey();
         if (!AppProperties.hasText(publicKey)) {
-            // Conta conecta mesmo assim; a public_key pode ser preenchida depois via /users/me.
-            log.warn("OAuth MP sem public_key na resposta; salvando conexão sem ela (empresa={})", empresaId);
-            publicKey = "";
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_GATEWAY,
+                    "O Mercado Pago não retornou a Public Key da clínica. Tente conectar novamente."
+            );
         }
         String accountId = AppProperties.hasText(tokens.userId())
                 ? "mp-oauth-" + tokens.userId()
@@ -487,11 +500,17 @@ public class MercadoPagoOAuthService {
     }
 
     private void atualizarTokens(Integer contaId, TokenResponse tokens) {
+        if (!AppProperties.hasText(tokens.refreshToken())) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_GATEWAY,
+                    "Renovação OAuth sem refresh_token. Conecte a conta Mercado Pago novamente."
+            );
+        }
         jdbc.update(
                 """
                 UPDATE flutz.conta_pagamento
                 SET access_token = ?,
-                    refresh_token = COALESCE(?, refresh_token),
+                    refresh_token = ?,
                     token_expires_at = ?,
                     public_key = COALESCE(?, public_key),
                     ultima_atualizacao = CURRENT_TIMESTAMP
@@ -550,8 +569,9 @@ public class MercadoPagoOAuthService {
     }
 
     private static boolean precisaRenovar(ContaRow conta) {
+        // Sem expires_at conhecido: força refresh antes de cobrar (evita token morto).
         if (conta.expiresAt() == null) {
-            return false;
+            return true;
         }
         return Instant.now().plus(REFRESH_SKEW).isAfter(conta.expiresAt());
     }
