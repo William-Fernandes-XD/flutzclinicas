@@ -14,6 +14,7 @@ import java.time.Instant;
 import java.util.Base64;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
@@ -101,13 +102,17 @@ public class MercadoPagoOAuthService {
     }
 
     public String redirectUriConfigurado() {
+        String raw;
         if (properties.mercadoPagoOAuthConfigured()) {
-            return properties.mercadopago().redirectUri().trim();
+            raw = properties.mercadopago().redirectUri().trim();
+        } else {
+            String appUrl = properties.app() != null && AppProperties.hasText(properties.app().url())
+                    ? properties.app().url().trim().replaceAll("/+$", "")
+                    : "http://localhost:8080";
+            raw = appUrl + "/api/public/mercadopago/oauth/callback";
         }
-        String appUrl = properties.app() != null && AppProperties.hasText(properties.app().url())
-                ? properties.app().url().trim().replaceAll("/+$", "")
-                : "http://localhost:8080";
-        return appUrl + "/api/public/mercadopago/oauth/callback";
+        // Painel e authorize/token exigem match byte-a-byte; remove barra final acidental.
+        return raw.replaceAll("/+$", "");
     }
 
     @Transactional
@@ -329,16 +334,18 @@ public class MercadoPagoOAuthService {
             JsonNode node = json.readTree(response.body());
             String access = text(node, "access_token");
             if (!AppProperties.hasText(access)) {
+                log.warn("OAuth token MP sem access_token: {}", truncar(response.body()));
                 throw new ResponseStatusException(
                         HttpStatus.BAD_GATEWAY,
-                        "Não foi possível conectar sua conta Mercado Pago. Tente novamente."
+                        mensagemErroToken(response.body(), redirectUriConfigurado())
                 );
             }
             String refresh = text(node, "refresh_token");
             if (exigirRefresh && !AppProperties.hasText(refresh)) {
+                log.warn("OAuth token MP sem refresh_token scope={}", text(node, "scope"));
                 throw new ResponseStatusException(
                         HttpStatus.BAD_GATEWAY,
-                        "O Mercado Pago não retornou refresh_token (offline_access). Reconecte a conta."
+                        "O Mercado Pago não retornou refresh_token. No painel, marque a permissão offline_access (e write) e tente de novo."
                 );
             }
             String publicKey = text(node, "public_key");
@@ -350,6 +357,11 @@ public class MercadoPagoOAuthService {
             Instant expiresAt = Instant.now().plusSeconds(Math.max(60, expiresIn));
             if (!AppProperties.hasText(publicKey) && AppProperties.hasText(access)) {
                 publicKey = buscarPublicKey(access);
+            }
+            if (!AppProperties.hasText(publicKey) && properties.mercadoPagoConfigured()) {
+                // Fallback marketplace: Bricks com PK da plataforma + cobrança com token do vendedor.
+                publicKey = limpar(properties.mercadopago().publicKey());
+                log.warn("OAuth MP sem public_key do vendedor; usando public_key da plataforma no Bricks");
             }
             String nome = buscarNomeConta(access);
             return new TokenResponse(access, refresh, publicKey, userId, scope, expiresAt, nome);
@@ -420,14 +432,14 @@ public class MercadoPagoOAuthService {
         if (!AppProperties.hasText(tokens.refreshToken())) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_GATEWAY,
-                    "O Mercado Pago não retornou refresh_token. Verifique se o app tem offline_access e tente de novo."
+                    "O Mercado Pago não retornou refresh_token. No painel, marque offline_access e tente de novo."
             );
         }
         String publicKey = tokens.publicKey();
         if (!AppProperties.hasText(publicKey)) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_GATEWAY,
-                    "O Mercado Pago não retornou a Public Key da clínica. Tente conectar novamente."
+                    "Sem Public Key do vendedor nem da plataforma. Confira MERCADOPAGO_PUBLIC_KEY no servidor."
             );
         }
         String accountId = AppProperties.hasText(tokens.userId())
@@ -652,9 +664,50 @@ public class MercadoPagoOAuthService {
             return "Código de autorização inválido ou já usado. Clique em Conectar de novo (não recarregue a página do callback).";
         }
         if (lower.contains("code_verifier") || lower.contains("pkce")) {
-            return "Falha no PKCE. Confirme que o app no Mercado Pago está com authorization code + PKCE habilitado.";
+            return "Falha no PKCE. No painel MP deixe PKCE como Não (ou ligue PKCE nos dois lados).";
+        }
+        String detalhe = extrairMensagemMp(body);
+        if (detalhe != null) {
+            return "Mercado Pago recusou a conexão: " + detalhe;
         }
         return "Não foi possível conectar sua conta Mercado Pago. Tente novamente.";
+    }
+
+    private static String extrairMensagemMp(String body) {
+        if (body == null || body.isBlank()) {
+            return null;
+        }
+        try {
+            JsonNode node = new ObjectMapper().readTree(body);
+            for (String field : List.of("message", "error_description", "error", "cause")) {
+                if (node.hasNonNull(field)) {
+                    if (node.get(field).isArray() && node.get(field).size() > 0) {
+                        JsonNode first = node.get(field).get(0);
+                        if (first.hasNonNull("description")) {
+                            return first.get("description").asText();
+                        }
+                        if (first.hasNonNull("message")) {
+                            return first.get("message").asText();
+                        }
+                    }
+                    String v = node.get(field).asText();
+                    if (v != null && !v.isBlank() && v.length() < 180) {
+                        return v.trim();
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+            /* body não-JSON */
+        }
+        return null;
+    }
+
+    private static String limpar(String value) {
+        if (value == null) {
+            return null;
+        }
+        String limpo = value.replaceAll("\\s+", "").trim();
+        return limpo.isEmpty() ? null : limpo;
     }
 
     private static String truncar(String body) {
