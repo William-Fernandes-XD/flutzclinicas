@@ -104,8 +104,8 @@ Se aparecer **"O aplicativo não está pronto para se conectar a Mercado Pago"**
 | --- | --- |
 | Frontend (Vercel) | `https://flutzclinicas.com.br` |
 | API | `https://api.flutzclinicas.com.br` |
-| Redirect OAuth (preferida) | `https://flutzclinicas.com.br/api/public/mercadopago/oauth/callback` |
-| Redirect OAuth (direto na API) | `https://api.flutzclinicas.com.br/api/public/mercadopago/oauth/callback` |
+| Redirect OAuth (**recomendada**) | `https://api.flutzclinicas.com.br/api/public/mercadopago/oauth/callback` |
+| Redirect OAuth (via site/Vercel) | `https://flutzclinicas.com.br/api/public/mercadopago/oauth/callback` |
 
 ### Por que “página não existe” no callback
 
@@ -118,7 +118,7 @@ O `frontend/vercel.json` encaminha `/api/*` → `https://api.flutzclinicas.com.b
 1. No servidor da API, use o modelo `.env.production.example`:
    - `APP_URL=https://api.flutzclinicas.com.br`
    - `FRONTEND_URL=https://flutzclinicas.com.br`
-   - `MERCADOPAGO_REDIRECT_URI=https://flutzclinicas.com.br/api/public/mercadopago/oauth/callback`
+   - `MERCADOPAGO_REDIRECT_URI=https://api.flutzclinicas.com.br/api/public/mercadopago/oauth/callback`
    - Client ID / Secret / Public Key / Access Token de **produção**
 2. No painel MP, cadastre **exatamente** essa Redirect URL (pode cadastrar as duas: site + `api.`).
 3. Redeploy da Vercel com o `vercel.json` atualizado.

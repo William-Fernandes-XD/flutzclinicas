@@ -40,7 +40,7 @@ public class MercadoPagoOAuthService {
     private static final SecureRandom RANDOM = new SecureRandom();
     private static final Duration STATE_TTL = Duration.ofMinutes(15);
     private static final Duration REFRESH_SKEW = Duration.ofMinutes(5);
-    private static final String AUTH_URL = "https://auth.mercadopago.com.br/authorization";
+    private static final String AUTH_URL = "https://auth.mercadopago.com/authorization";
     private static final String TOKEN_URL = "https://api.mercadopago.com/oauth/token";
 
     private final JdbcTemplate jdbc;
@@ -111,6 +111,13 @@ public class MercadoPagoOAuthService {
                 ? "http://localhost:5173"
                 : properties.app().frontendUrl().trim();
         String base = frontend.replaceAll("/+$", "") + "/app/financeiro";
+        log.info(
+                "OAuth MP callback redirectUri={} code={} state={} error={}",
+                redirectUriConfigurado(),
+                AppProperties.hasText(code),
+                AppProperties.hasText(state) ? state.trim().substring(0, Math.min(8, state.trim().length())) + "…" : false,
+                error
+        );
 
         if (AppProperties.hasText(error)) {
             log.info("OAuth MP cancelado/erro: {} — {}", error, errorDescription);
@@ -284,8 +291,33 @@ public class MercadoPagoOAuthService {
                     .build();
             HttpResponse<String> response = HTTP.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                log.warn("OAuth token MP HTTP {}: {}", response.statusCode(), truncar(response.body()));
-                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, mensagemErroToken(response.body()));
+                // Fallback: alguns ambientes do MP aceitam melhor JSON no /oauth/token
+                Map<String, String> asMap = new LinkedHashMap<>();
+                for (String part : formBody.split("&")) {
+                    int eq = part.indexOf('=');
+                    if (eq <= 0) {
+                        continue;
+                    }
+                    asMap.put(
+                            java.net.URLDecoder.decode(part.substring(0, eq), StandardCharsets.UTF_8),
+                            java.net.URLDecoder.decode(part.substring(eq + 1), StandardCharsets.UTF_8)
+                    );
+                }
+                String jsonBody = json.writeValueAsString(asMap);
+                HttpRequest jsonReq = HttpRequest.newBuilder()
+                        .uri(URI.create(TOKEN_URL))
+                        .timeout(Duration.ofSeconds(20))
+                        .header("Content-Type", "application/json")
+                        .header("Accept", "application/json")
+                        .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
+                        .build();
+                HttpResponse<String> jsonRes = HTTP.send(jsonReq, HttpResponse.BodyHandlers.ofString());
+                if (jsonRes.statusCode() >= 200 && jsonRes.statusCode() < 300) {
+                    response = jsonRes;
+                } else {
+                    log.warn("OAuth token MP HTTP form={} json={}: {}", response.statusCode(), jsonRes.statusCode(), truncar(jsonRes.body()));
+                    throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, mensagemErroToken(jsonRes.body(), redirectUriConfigurado()));
+                }
             }
             JsonNode node = json.readTree(response.body());
             String access = text(node, "access_token");
@@ -372,11 +404,11 @@ public class MercadoPagoOAuthService {
     }
 
     private void persistirConexao(Integer empresaId, TokenResponse tokens) {
-        if (!AppProperties.hasText(tokens.publicKey())) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_GATEWAY,
-                    "Não foi possível obter a chave pública da conta Mercado Pago. Tente novamente."
-            );
+        String publicKey = tokens.publicKey();
+        if (!AppProperties.hasText(publicKey)) {
+            // Conta conecta mesmo assim; a public_key pode ser preenchida depois via /users/me.
+            log.warn("OAuth MP sem public_key na resposta; salvando conexão sem ela (empresa={})", empresaId);
+            publicKey = "";
         }
         String accountId = AppProperties.hasText(tokens.userId())
                 ? "mp-oauth-" + tokens.userId()
@@ -416,7 +448,7 @@ public class MercadoPagoOAuthService {
                     WHERE conta_pagamento_id = ?
                     """,
                     accountId,
-                    tokens.publicKey(),
+                    publicKey,
                     tokens.accessToken(),
                     tokens.refreshToken(),
                     Timestamp.from(tokens.expiresAt()),
@@ -436,7 +468,7 @@ public class MercadoPagoOAuthService {
                     """,
                     empresaId,
                     accountId,
-                    tokens.publicKey(),
+                    publicKey,
                     tokens.accessToken(),
                     tokens.refreshToken(),
                     Timestamp.from(tokens.expiresAt()),
@@ -581,10 +613,10 @@ public class MercadoPagoOAuthService {
         return URLEncoder.encode(value, StandardCharsets.UTF_8);
     }
 
-    private static String mensagemErroToken(String body) {
+    private static String mensagemErroToken(String body, String redirectUriEsperado) {
         String lower = body == null ? "" : body.toLowerCase(Locale.ROOT);
         if (lower.contains("redirect_uri") || lower.contains("redirect uri")) {
-            return "Redirect URI do servidor não confere com a cadastrada no Mercado Pago. Use https://flutzclinicas.com.br/api/public/mercadopago/oauth/callback";
+            return "Redirect URI não confere com a do painel MP. Cadastre também: " + redirectUriEsperado;
         }
         if (lower.contains("invalid_client") || lower.contains("client_id") || lower.contains("client_secret")) {
             return "Client ID ou Client Secret inválidos no servidor. Confira Detalhes da aplicação no painel MP.";

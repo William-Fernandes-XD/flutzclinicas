@@ -11,7 +11,7 @@ data:
   APP_URL: "https://api.flutzclinicas.com.br"
   FRONTEND_URL: "https://flutzclinicas.com.br"
   CORS_ALLOWED_ORIGINS: "https://flutzclinicas.com.br,https://www.flutzclinicas.com.br"
-  MERCADOPAGO_REDIRECT_URI: "https://flutzclinicas.com.br/api/public/mercadopago/oauth/callback"
+  MERCADOPAGO_REDIRECT_URI: "https://api.flutzclinicas.com.br/api/public/mercadopago/oauth/callback"
   DATABASE_HOST: "flutz-postgres"
   DATABASE_PORT: "5432"
   DATABASE_NAME: "flutz"
