@@ -69,7 +69,7 @@ class MercadoPagoOAuthServiceTest {
         Empresa empresa = mock(Empresa.class);
         when(empresa.getId()).thenReturn(5);
         when(clinic.empresaAtual()).thenReturn(empresa);
-        when(jdbc.update(anyString(), any(), any(), any(), any(), any())).thenReturn(1);
+        when(jdbc.update(anyString(), any(), any(), any(), any(), any(), any())).thenReturn(1);
 
         MercadoPagoOAuthService.ConnectStart start = oauth.iniciarConexao();
 
@@ -83,7 +83,7 @@ class MercadoPagoOAuthServiceTest {
                 "http://localhost:8080/api/public/mercadopago/oauth/callback",
                 start.redirectUri()
         );
-        verify(jdbc).update(anyString(), any(), eq(5), eq(10), any(Timestamp.class), any());
+        verify(jdbc).update(anyString(), any(), eq(5), eq(10), any(Timestamp.class), any(), anyString());
     }
 
     @Test
@@ -95,13 +95,13 @@ class MercadoPagoOAuthServiceTest {
         Empresa empresa = mock(Empresa.class);
         when(empresa.getId()).thenReturn(5);
         when(clinic.empresaAtual()).thenReturn(empresa);
-        when(jdbc.update(anyString(), any(), any(), any(), any(), any())).thenReturn(1);
+        when(jdbc.update(anyString(), any(), any(), any(), any(), any(), any())).thenReturn(1);
 
         MercadoPagoOAuthService.ConnectStart start = oauth.iniciarConexao();
 
         assertTrue(start.authorizationUrl().contains("code_challenge="));
         assertTrue(start.authorizationUrl().contains("code_challenge_method=S256"));
-        verify(jdbc).update(anyString(), any(), eq(5), eq(10), any(Timestamp.class), anyString());
+        verify(jdbc).update(anyString(), any(), eq(5), eq(10), any(Timestamp.class), anyString(), anyString());
     }
 
     @Test
@@ -111,6 +111,14 @@ class MercadoPagoOAuthServiceTest {
         ));
         ResponseStatusException ex = assertThrows(ResponseStatusException.class, oauth::iniciarConexao);
         assertEquals(HttpStatus.FORBIDDEN, ex.getStatusCode());
+    }
+
+    @Test
+    void callbackVazioEIgnoradoSemErroNaTela() {
+        MercadoPagoOAuthService.CallbackResult result =
+                oauth.processarCallback(null, null, null, null);
+        assertTrue(result.skipRedirect());
+        assertEquals(null, result.redirectUrl());
     }
 
     @Test

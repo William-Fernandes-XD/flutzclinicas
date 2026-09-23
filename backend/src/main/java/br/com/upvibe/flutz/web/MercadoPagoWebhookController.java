@@ -74,6 +74,9 @@ public class MercadoPagoWebhookController {
             @RequestParam(value = "error_description", required = false) String errorDescription
     ) {
         MercadoPagoOAuthService.CallbackResult result = oauth.processarCallback(code, state, error, errorDescription);
+        if (result.skipRedirect()) {
+            return ResponseEntity.noContent().build();
+        }
         return ResponseEntity.status(HttpStatus.FOUND)
                 .header(HttpHeaders.LOCATION, result.redirectUrl())
                 .build();

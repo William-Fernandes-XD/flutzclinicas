@@ -71,19 +71,20 @@ public class MercadoPagoOAuthService {
         String codeVerifier = pkce ? novoCodeVerifier() : null;
         String codeChallenge = pkce ? codeChallengeS256(codeVerifier) : null;
         Instant expires = Instant.now().plus(STATE_TTL);
+        String redirectUri = redirectUriConfigurado();
         jdbc.update(
                 """
                 INSERT INTO flutz.mercadopago_oauth_state
-                  (state_token, empresa_id, ator_id, expires_at, code_verifier)
-                VALUES (?, ?, ?, ?, ?)
+                  (state_token, empresa_id, ator_id, expires_at, code_verifier, redirect_uri)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
                 state,
                 empresaId,
                 auth.atorId(),
                 Timestamp.from(expires),
-                codeVerifier
+                codeVerifier,
+                redirectUri
         );
-        String redirectUri = redirectUriConfigurado();
         // Formato oficial (Checkout Transparente / OAuth):
         // https://auth.mercadopago.com/authorization?client_id=...&response_type=code&platform_id=mp&state=...&redirect_uri=...
         // PKCE só se habilitado no painel E em MERCADOPAGO_OAUTH_PKCE=true
@@ -125,16 +126,19 @@ public class MercadoPagoOAuthService {
             log.info("OAuth MP cancelado/erro: {} — {}", error, errorDescription);
             String msg = "access_denied".equalsIgnoreCase(error)
                     ? "A autorização foi cancelada."
-                    : "Não foi possível conectar sua conta Mercado Pago. Tente novamente.";
+                    : (AppProperties.hasText(errorDescription)
+                            ? errorDescription.trim()
+                            : "Não foi possível conectar sua conta Mercado Pago. Tente novamente.");
             return CallbackResult.redirect(base + "?mp=erro&motivo=" + urlEncode(msg));
         }
         if (!AppProperties.hasText(code) || !AppProperties.hasText(state)) {
-            // Hit sem query (bot, prefetch, health-check ou redirect sem params) — não é falha de login.
-            log.warn(
-                    "OAuth MP callback sem code/state (redirectUri={}). Ignore se não veio do fluxo Conectar.",
+            // Bot/prefetch/health batem a redirect URI sem params.
+            // NÃO mandar o usuário para a tela de erro — isso apagava o fluxo real.
+            log.info(
+                    "OAuth MP callback vazio ignorado (redirectUri={})",
                     redirectUriConfigurado()
             );
-            return CallbackResult.redirect(base + "?mp=erro&motivo=" + urlEncode("Não foi possível conectar sua conta Mercado Pago. Tente novamente."));
+            return CallbackResult.ignored();
         }
         log.info(
                 "OAuth MP callback ok redirectUri={} state={}",
@@ -144,12 +148,17 @@ public class MercadoPagoOAuthService {
 
         StateRow stateRow = consumirState(state.trim());
         if (stateRow == null) {
-            return CallbackResult.redirect(base + "?mp=erro&motivo=" + urlEncode("A autorização expirou ou é inválida. Inicie a conexão novamente."));
+            return CallbackResult.redirect(base + "?mp=erro&motivo=" + urlEncode(
+                    "A autorização expirou ou é inválida. Clique em Conectar Mercado Pago de novo."
+            ));
         }
 
         try {
             exigirOAuthConfigurado();
-            TokenResponse tokens = trocarCodigo(code.trim(), stateRow.codeVerifier());
+            String redirectParaToken = AppProperties.hasText(stateRow.redirectUri())
+                    ? stateRow.redirectUri().trim().replaceAll("/+$", "")
+                    : redirectUriConfigurado();
+            TokenResponse tokens = trocarCodigo(code.trim(), stateRow.codeVerifier(), redirectParaToken);
             persistirConexao(stateRow.empresaId(), tokens);
             return CallbackResult.redirect(base + "?mp=conectado");
         } catch (ResponseStatusException ex) {
@@ -159,8 +168,10 @@ public class MercadoPagoOAuthService {
                     : ex.getReason();
             return CallbackResult.redirect(base + "?mp=erro&motivo=" + urlEncode(msg));
         } catch (Exception ex) {
-            log.error("Erro inesperado no callback OAuth MP: {}", ex.getMessage());
-            return CallbackResult.redirect(base + "?mp=erro&motivo=" + urlEncode("Não foi possível conectar sua conta Mercado Pago. Tente novamente."));
+            log.error("Erro inesperado no callback OAuth MP: {}", ex.getMessage(), ex);
+            return CallbackResult.redirect(base + "?mp=erro&motivo=" + urlEncode(
+                    "Erro interno ao conectar Mercado Pago. Contate o suporte se persistir."
+            ));
         }
     }
 
@@ -225,7 +236,7 @@ public class MercadoPagoOAuthService {
     private StateRow consumirState(String state) {
         StateRow row = jdbc.query(
                 """
-                SELECT oauth_state_id, empresa_id, ator_id, expires_at, used_at, code_verifier
+                SELECT oauth_state_id, empresa_id, ator_id, expires_at, used_at, code_verifier, redirect_uri
                 FROM flutz.mercadopago_oauth_state
                 WHERE state_token = ?
                 """,
@@ -241,7 +252,8 @@ public class MercadoPagoOAuthService {
                             rs.getInt("ator_id"),
                             exp == null ? null : exp.toInstant(),
                             used == null ? null : used.toInstant(),
-                            rs.getString("code_verifier")
+                            rs.getString("code_verifier"),
+                            rs.getString("redirect_uri")
                     );
                 },
                 state
@@ -266,17 +278,18 @@ public class MercadoPagoOAuthService {
         return n == 1 ? row : null;
     }
 
-    private TokenResponse trocarCodigo(String code, String codeVerifier) {
+    private TokenResponse trocarCodigo(String code, String codeVerifier, String redirectUri) {
         Map<String, String> fields = new LinkedHashMap<>();
         fields.put("grant_type", "authorization_code");
         fields.put("client_id", properties.mercadopago().clientId().trim());
         fields.put("client_secret", properties.mercadopago().clientSecret().trim());
         fields.put("code", code);
-        fields.put("redirect_uri", redirectUriConfigurado());
+        fields.put("redirect_uri", redirectUri);
         if (AppProperties.hasText(codeVerifier)) {
             fields.put("code_verifier", codeVerifier);
         }
-        return postToken(form(fields), true);
+        log.info("OAuth MP trocarCodigo redirectUri={}", redirectUri);
+        return postToken(form(fields), true, redirectUri);
     }
 
     private TokenResponse renovarToken(String refreshToken) {
@@ -289,10 +302,10 @@ public class MercadoPagoOAuthService {
                         "refresh_token", refreshToken
                 )
         );
-        return postToken(body, true);
+        return postToken(body, true, redirectUriConfigurado());
     }
 
-    private TokenResponse postToken(String formBody, boolean exigirRefresh) {
+    private TokenResponse postToken(String formBody, boolean exigirRefresh, String redirectUriParaMsg) {
         try {
             Map<String, String> asMap = new LinkedHashMap<>();
             for (String part : formBody.split("&")) {
@@ -328,7 +341,10 @@ public class MercadoPagoOAuthService {
                     response = formRes;
                 } else {
                     log.warn("OAuth token MP HTTP json={} form={}: {}", response.statusCode(), formRes.statusCode(), truncar(formRes.body()));
-                    throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, mensagemErroToken(formRes.body(), redirectUriConfigurado()));
+                    throw new ResponseStatusException(
+                            HttpStatus.BAD_GATEWAY,
+                            mensagemErroToken(formRes.body(), redirectUriParaMsg)
+                    );
                 }
             }
             JsonNode node = json.readTree(response.body());
@@ -337,7 +353,7 @@ public class MercadoPagoOAuthService {
                 log.warn("OAuth token MP sem access_token: {}", truncar(response.body()));
                 throw new ResponseStatusException(
                         HttpStatus.BAD_GATEWAY,
-                        mensagemErroToken(response.body(), redirectUriConfigurado())
+                        mensagemErroToken(response.body(), redirectUriParaMsg)
                 );
             }
             String refresh = text(node, "refresh_token");
@@ -721,9 +737,13 @@ public class MercadoPagoOAuthService {
     public record ConnectStart(String authorizationUrl, String expiresAt, String redirectUri) {
     }
 
-    public record CallbackResult(String redirectUrl) {
+    public record CallbackResult(String redirectUrl, boolean skipRedirect) {
         static CallbackResult redirect(String url) {
-            return new CallbackResult(url);
+            return new CallbackResult(url, false);
+        }
+
+        static CallbackResult ignored() {
+            return new CallbackResult(null, true);
         }
     }
 
@@ -733,7 +753,8 @@ public class MercadoPagoOAuthService {
             int atorId,
             Instant expiresAt,
             Instant usedAt,
-            String codeVerifier
+            String codeVerifier,
+            String redirectUri
     ) {
     }
 
