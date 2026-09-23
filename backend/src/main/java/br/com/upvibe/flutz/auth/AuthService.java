@@ -435,23 +435,28 @@ public class AuthService {
         if (increment <= 0) {
             return 0;
         }
+        // Teto de espera evita bloqueio crescente sem fim (ex.: bots batendo a noite toda).
+        final int maxWaitSeconds = 300;
         Integer falhas = jdbc.queryForObject(
                 """
                 INSERT INTO flutz.tentativa_login (chave, falhas, bloqueado_ate, ultima_falha)
                 VALUES (?, 1, CURRENT_TIMESTAMP + make_interval(secs => ?), CURRENT_TIMESTAMP)
                 ON CONFLICT (chave) DO UPDATE
                 SET falhas = flutz.tentativa_login.falhas + 1,
-                    bloqueado_ate = CURRENT_TIMESTAMP + make_interval(secs => (flutz.tentativa_login.falhas + 1) * ?),
+                    bloqueado_ate = CURRENT_TIMESTAMP + make_interval(
+                        secs => LEAST((flutz.tentativa_login.falhas + 1) * ?, ?)
+                    ),
                     ultima_falha = CURRENT_TIMESTAMP
                 RETURNING falhas
                 """,
                 Integer.class,
                 chave,
+                Math.min(increment, maxWaitSeconds),
                 increment,
-                increment
+                maxWaitSeconds
         );
         int count = falhas == null ? 1 : falhas;
-        return (long) count * increment;
+        return Math.min((long) count * increment, maxWaitSeconds);
     }
 
     private int lockIncrement() {

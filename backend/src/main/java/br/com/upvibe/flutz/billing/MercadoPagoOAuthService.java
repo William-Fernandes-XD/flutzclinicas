@@ -66,8 +66,9 @@ public class MercadoPagoOAuthService {
         Integer empresaId = clinic.empresaAtual().getId();
         AuthPrincipal auth = AuthHolder.current();
         String state = novoState();
-        String codeVerifier = novoCodeVerifier();
-        String codeChallenge = codeChallengeS256(codeVerifier);
+        boolean pkce = properties.mercadopago() != null && properties.mercadopago().oauthPkceEnabled();
+        String codeVerifier = pkce ? novoCodeVerifier() : null;
+        String codeChallenge = pkce ? codeChallengeS256(codeVerifier) : null;
         Instant expires = Instant.now().plus(STATE_TTL);
         jdbc.update(
                 """
@@ -82,17 +83,21 @@ public class MercadoPagoOAuthService {
                 codeVerifier
         );
         String redirectUri = redirectUriConfigurado();
-        // Montagem manual evita double-encode do redirect_uri (MP exige match exato).
-        String url = AUTH_URL
-                + "?client_id=" + urlEncode(properties.mercadopago().clientId().trim())
-                + "&response_type=code"
-                + "&platform_id=mp"
-                + "&state=" + urlEncode(state)
-                + "&redirect_uri=" + urlEncode(redirectUri)
-                + "&code_challenge=" + urlEncode(codeChallenge)
-                + "&code_challenge_method=S256";
-        log.info("OAuth MP iniciar empresa={} redirectUri={}", empresaId, redirectUri);
-        return new ConnectStart(url, expires.toString(), redirectUri);
+        // Formato oficial (Checkout Transparente / OAuth):
+        // https://auth.mercadopago.com/authorization?client_id=...&response_type=code&platform_id=mp&state=...&redirect_uri=...
+        // PKCE só se habilitado no painel E em MERCADOPAGO_OAUTH_PKCE=true
+        StringBuilder url = new StringBuilder(AUTH_URL)
+                .append("?client_id=").append(urlEncode(properties.mercadopago().clientId().trim()))
+                .append("&response_type=code")
+                .append("&platform_id=mp")
+                .append("&state=").append(urlEncode(state))
+                .append("&redirect_uri=").append(urlEncode(redirectUri));
+        if (pkce) {
+            url.append("&code_challenge=").append(urlEncode(codeChallenge))
+                    .append("&code_challenge_method=S256");
+        }
+        log.info("OAuth MP iniciar empresa={} redirectUri={} pkce={}", empresaId, redirectUri, pkce);
+        return new ConnectStart(url.toString(), expires.toString(), redirectUri);
     }
 
     public String redirectUriConfigurado() {
@@ -111,14 +116,6 @@ public class MercadoPagoOAuthService {
                 ? "http://localhost:5173"
                 : properties.app().frontendUrl().trim();
         String base = frontend.replaceAll("/+$", "") + "/app/financeiro";
-        log.info(
-                "OAuth MP callback redirectUri={} code={} state={} error={}",
-                redirectUriConfigurado(),
-                AppProperties.hasText(code),
-                AppProperties.hasText(state) ? state.trim().substring(0, Math.min(8, state.trim().length())) + "…" : false,
-                error
-        );
-
         if (AppProperties.hasText(error)) {
             log.info("OAuth MP cancelado/erro: {} — {}", error, errorDescription);
             String msg = "access_denied".equalsIgnoreCase(error)
@@ -127,8 +124,18 @@ public class MercadoPagoOAuthService {
             return CallbackResult.redirect(base + "?mp=erro&motivo=" + urlEncode(msg));
         }
         if (!AppProperties.hasText(code) || !AppProperties.hasText(state)) {
+            // Hit sem query (bot, prefetch, health-check ou redirect sem params) — não é falha de login.
+            log.warn(
+                    "OAuth MP callback sem code/state (redirectUri={}). Ignore se não veio do fluxo Conectar.",
+                    redirectUriConfigurado()
+            );
             return CallbackResult.redirect(base + "?mp=erro&motivo=" + urlEncode("Não foi possível conectar sua conta Mercado Pago. Tente novamente."));
         }
+        log.info(
+                "OAuth MP callback ok redirectUri={} state={}",
+                redirectUriConfigurado(),
+                state.trim().substring(0, Math.min(8, state.trim().length())) + "…"
+        );
 
         StateRow stateRow = consumirState(state.trim());
         if (stateRow == null) {
@@ -282,41 +289,41 @@ public class MercadoPagoOAuthService {
 
     private TokenResponse postToken(String formBody) {
         try {
-            HttpRequest request = HttpRequest.newBuilder()
+            Map<String, String> asMap = new LinkedHashMap<>();
+            for (String part : formBody.split("&")) {
+                int eq = part.indexOf('=');
+                if (eq <= 0) {
+                    continue;
+                }
+                asMap.put(
+                        java.net.URLDecoder.decode(part.substring(0, eq), StandardCharsets.UTF_8),
+                        java.net.URLDecoder.decode(part.substring(eq + 1), StandardCharsets.UTF_8)
+                );
+            }
+            // Docs oficiais usam JSON em POST /oauth/token
+            String jsonBody = json.writeValueAsString(asMap);
+            HttpRequest jsonReq = HttpRequest.newBuilder()
                     .uri(URI.create(TOKEN_URL))
                     .timeout(Duration.ofSeconds(20))
-                    .header("Content-Type", "application/x-www-form-urlencoded")
+                    .header("Content-Type", "application/json")
                     .header("Accept", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(formBody))
+                    .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
                     .build();
-            HttpResponse<String> response = HTTP.send(request, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> response = HTTP.send(jsonReq, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                // Fallback: alguns ambientes do MP aceitam melhor JSON no /oauth/token
-                Map<String, String> asMap = new LinkedHashMap<>();
-                for (String part : formBody.split("&")) {
-                    int eq = part.indexOf('=');
-                    if (eq <= 0) {
-                        continue;
-                    }
-                    asMap.put(
-                            java.net.URLDecoder.decode(part.substring(0, eq), StandardCharsets.UTF_8),
-                            java.net.URLDecoder.decode(part.substring(eq + 1), StandardCharsets.UTF_8)
-                    );
-                }
-                String jsonBody = json.writeValueAsString(asMap);
-                HttpRequest jsonReq = HttpRequest.newBuilder()
+                HttpRequest formReq = HttpRequest.newBuilder()
                         .uri(URI.create(TOKEN_URL))
                         .timeout(Duration.ofSeconds(20))
-                        .header("Content-Type", "application/json")
+                        .header("Content-Type", "application/x-www-form-urlencoded")
                         .header("Accept", "application/json")
-                        .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
+                        .POST(HttpRequest.BodyPublishers.ofString(formBody))
                         .build();
-                HttpResponse<String> jsonRes = HTTP.send(jsonReq, HttpResponse.BodyHandlers.ofString());
-                if (jsonRes.statusCode() >= 200 && jsonRes.statusCode() < 300) {
-                    response = jsonRes;
+                HttpResponse<String> formRes = HTTP.send(formReq, HttpResponse.BodyHandlers.ofString());
+                if (formRes.statusCode() >= 200 && formRes.statusCode() < 300) {
+                    response = formRes;
                 } else {
-                    log.warn("OAuth token MP HTTP form={} json={}: {}", response.statusCode(), jsonRes.statusCode(), truncar(jsonRes.body()));
-                    throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, mensagemErroToken(jsonRes.body(), redirectUriConfigurado()));
+                    log.warn("OAuth token MP HTTP json={} form={}: {}", response.statusCode(), formRes.statusCode(), truncar(formRes.body()));
+                    throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, mensagemErroToken(formRes.body(), redirectUriConfigurado()));
                 }
             }
             JsonNode node = json.readTree(response.body());

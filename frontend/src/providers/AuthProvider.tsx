@@ -23,11 +23,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logoutLock = useRef<Promise<void> | null>(null);
   const me = useQuery({
     queryKey: ["auth", "me"],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
+      const timeout = AbortSignal.timeout(12_000);
+      const combined =
+        typeof AbortSignal.any === "function" ? AbortSignal.any([signal, timeout]) : timeout;
       try {
-        return await http<Session>("/api/auth/me");
+        return await http<Session>("/api/auth/me", { signal: combined });
       } catch (error) {
         if (error instanceof HttpError && error.status === 401) {
+          return null;
+        }
+        // Rede/5xx/timeout: libera a tela de login em vez de splash infinito.
+        if (
+          error instanceof HttpError
+          || (error instanceof DOMException && error.name === "TimeoutError")
+          || (error instanceof TypeError)
+          || (error instanceof Error && /abort|timeout|network/i.test(error.message))
+        ) {
           return null;
         }
         throw error;

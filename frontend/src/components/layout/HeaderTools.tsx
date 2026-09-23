@@ -124,16 +124,24 @@ export function HeaderTools({ variant }: { variant: "platform" | "clinic" | "cli
     let source: EventSource | null = null;
     let closed = false;
     let retryTimer: number | undefined;
+    let backoffMs = 4_000;
 
     function connect() {
       if (closed) return;
+      // Aba em segundo plano: não reconectar em loop (evita tempestade noturna no backend).
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+        retryTimer = window.setTimeout(connect, 30_000);
+        return;
+      }
       try {
         source = new EventSource(url, { withCredentials: true });
       } catch {
-        retryTimer = window.setTimeout(connect, 4000);
+        retryTimer = window.setTimeout(connect, backoffMs);
+        backoffMs = Math.min(backoffMs * 2, 60_000);
         return;
       }
       source.addEventListener("notificacoes", (event) => {
+        backoffMs = 4_000;
         void queryClient.invalidateQueries({ queryKey: ["notificacoes"] });
         void queryClient.invalidateQueries({ queryKey: ["notificacoes-nao-lidas"] });
         try {
@@ -151,16 +159,27 @@ export function HeaderTools({ variant }: { variant: "platform" | "clinic" | "cli
         source?.close();
         source = null;
         if (!closed) {
-          retryTimer = window.setTimeout(connect, 4000);
+          retryTimer = window.setTimeout(connect, backoffMs);
+          backoffMs = Math.min(backoffMs * 2, 60_000);
         }
       };
     }
+
+    function onVisibility() {
+      if (document.visibilityState === "visible" && !source && !closed) {
+        if (retryTimer) window.clearTimeout(retryTimer);
+        backoffMs = 4_000;
+        connect();
+      }
+    }
+    document.addEventListener("visibilitychange", onVisibility);
 
     connect();
     return () => {
       closed = true;
       if (retryTimer) window.clearTimeout(retryTimer);
       source?.close();
+      document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("pointerdown", unlockAudio);
       window.removeEventListener("keydown", unlockAudio);
       som.pause();

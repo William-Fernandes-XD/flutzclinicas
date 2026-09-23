@@ -89,7 +89,11 @@ No painel da aplicação → **Detalhes da aplicação**:
 
 Também cadastre a Redirect URI **idêntica** em: edição da aplicação → URLs de redirecionamento.
 
-O Flutz envia **PKCE (S256)** no Connect. Se no painel existir a opção *Usar o fluxo de authorization code com PKCE*, deixe **ligada** (recomendado). Se estiver desligada, o MP costuma aceitar os parâmetros mesmo assim.
+O Flutz envia OAuth no formato da [documentação oficial](https://www.mercadopago.com.br/developers/pt/docs/security/oauth/creation):
+
+`https://auth.mercadopago.com/authorization?client_id=...&response_type=code&platform_id=mp&state=...&redirect_uri=...`
+
+**PKCE** (`code_challenge`) só é enviado se `MERCADOPAGO_OAUTH_PKCE=true` **e** o app no painel tiver PKCE habilitado. Enviar PKCE com o app sem PKCE costuma gerar “não é possível conectar o aplicativo”.
 
 Se aparecer **"O aplicativo não está pronto para se conectar a Mercado Pago"**:
 

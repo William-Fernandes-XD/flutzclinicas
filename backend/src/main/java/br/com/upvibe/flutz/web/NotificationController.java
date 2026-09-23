@@ -88,8 +88,20 @@ public class NotificationController {
         SseEmitter emitter = new SseEmitter(SSE_TIMEOUT_MS);
         AtomicLong ultimo = new AtomicLong(-1);
         AtomicBoolean closed = new AtomicBoolean(false);
+        // Holder para cancelar o poll a partir dos callbacks (future só existe após schedule).
+        ScheduledFuture<?>[] pollRef = new ScheduledFuture<?>[1];
 
-        ScheduledFuture<?> future = sseScheduler.scheduleAtFixedRate(() -> {
+        Runnable markClosed = () -> {
+            if (!closed.compareAndSet(false, true)) {
+                return;
+            }
+            ScheduledFuture<?> poll = pollRef[0];
+            if (poll != null) {
+                poll.cancel(false);
+            }
+        };
+
+        pollRef[0] = sseScheduler.scheduleAtFixedRate(() -> {
             if (closed.get()) {
                 return;
             }
@@ -104,41 +116,47 @@ public class NotificationController {
                     emitter.send(SseEmitter.event().comment("ping"));
                 }
             } catch (IOException ex) {
-                // Cliente desconectou — encerra sem propagar para o DispatcherServlet.
-                closeQuietly(emitter, closed);
+                // Cliente/proxy encerrou a conexão. NÃO chamar emitter.complete():
+                // complete() tenta flush e gera AsyncRequestNotUsableException no async dispatch.
+                markClosed.run();
             } catch (Exception ex) {
+                if (isClientGone(ex)) {
+                    markClosed.run();
+                    return;
+                }
                 log.debug("SSE notificações: falha ao emitir para {}/{}: {}", destTipo, destId, ex.getMessage());
-                closeQuietly(emitter, closed);
+                markClosed.run();
             }
         }, 0, SSE_POLL_SECONDS, TimeUnit.SECONDS);
 
-        Runnable shutdown = () -> {
-            closed.set(true);
-            future.cancel(false);
-        };
-        emitter.onCompletion(shutdown);
+        emitter.onCompletion(markClosed);
         emitter.onTimeout(() -> {
-            shutdown.run();
+            markClosed.run();
             try {
                 emitter.complete();
             } catch (Exception ignored) {
-                /* already closed */
+                /* proxy já fechou — GlobalExceptionHandler engole AsyncRequestNotUsable */
             }
         });
-        emitter.onError(ex -> shutdown.run());
+        emitter.onError(ex -> markClosed.run());
 
         return emitter;
     }
 
-    private static void closeQuietly(SseEmitter emitter, AtomicBoolean closed) {
-        if (!closed.compareAndSet(false, true)) {
-            return;
+    /** Resposta SSE já inutilizável (aba fechada, proxy idle, timeout de rede). */
+    private static boolean isClientGone(Throwable ex) {
+        for (Throwable t = ex; t != null; t = t.getCause()) {
+            String name = t.getClass().getName();
+            if (name.contains("AsyncRequestNotUsableException")
+                    || name.contains("ClientAbortException")
+                    || name.contains("EofException")) {
+                return true;
+            }
+            if (t instanceof IOException) {
+                return true;
+            }
         }
-        try {
-            emitter.complete();
-        } catch (Exception ignored) {
-            /* already closed */
-        }
+        return false;
     }
 
     @PostMapping("/{id}/lida")

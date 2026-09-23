@@ -49,8 +49,13 @@ public record AppProperties(
             String webhookSecret,
             String clientId,
             String clientSecret,
-            String redirectUri
+            String redirectUri,
+            /** Se true, envia PKCE (code_challenge). Só use se o app no painel MP tiver PKCE ligado. */
+            Boolean oauthPkce
     ) {
+        public boolean oauthPkceEnabled() {
+            return Boolean.TRUE.equals(oauthPkce);
+        }
     }
 
     public boolean production() {

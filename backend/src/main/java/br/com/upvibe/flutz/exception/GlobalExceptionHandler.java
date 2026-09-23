@@ -14,6 +14,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
@@ -25,6 +26,15 @@ import jakarta.validation.ConstraintViolationException;
 public class GlobalExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
+    /**
+     * Cliente/proxy fechou a conexão (comum em SSE à noite). Não é falha da aplicação.
+     */
+    @ExceptionHandler(AsyncRequestNotUsableException.class)
+    public ResponseEntity<?> handleAsyncGone(AsyncRequestNotUsableException ex, HttpServletRequest request) {
+        log.debug("Conexão async encerrada em {}: {}", request.getRequestURI(), ex.getMessage());
+        return ResponseEntity.noContent().build();
+    }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiErrorResponse> handleValidation(
@@ -113,9 +123,25 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<ApiErrorResponse> handleUnexpected(Exception ex, HttpServletRequest request) {
+    public ResponseEntity<?> handleUnexpected(Exception ex, HttpServletRequest request) {
+        if (isClientGone(ex)) {
+            log.debug("Cliente desconectou em {}: {}", request.getRequestURI(), ex.getMessage());
+            return ResponseEntity.noContent().build();
+        }
         log.error("Unhandled error on {}", request.getRequestURI(), ex);
         return build(HttpStatus.INTERNAL_SERVER_ERROR, "Não foi possível concluir. Tente de novo.", request);
+    }
+
+    private static boolean isClientGone(Throwable ex) {
+        for (Throwable t = ex; t != null; t = t.getCause()) {
+            String name = t.getClass().getName();
+            if (name.contains("AsyncRequestNotUsableException")
+                    || name.contains("ClientAbortException")
+                    || name.contains("EofException")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private String formatFieldError(FieldError error) {

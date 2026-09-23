@@ -96,3 +96,5 @@ flutz:
     client-id: ${MERCADOPAGO_CLIENT_ID:}
     client-secret: ${MERCADOPAGO_CLIENT_SECRET:}
     redirect-uri: ${MERCADOPAGO_REDIRECT_URI:${APP_URL:http://localhost:8080}/api/public/mercadopago/oauth/callback}
+    # true somente se no painel MP estiver marcado "authorization code com PKCE"
+    oauth-pkce: ${MERCADOPAGO_OAUTH_PKCE:false}

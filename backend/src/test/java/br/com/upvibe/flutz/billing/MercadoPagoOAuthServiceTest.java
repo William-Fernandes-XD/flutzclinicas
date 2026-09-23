@@ -160,7 +160,7 @@ class MercadoPagoOAuthServiceTest {
                 null,
                 null,
                 null,
-                new AppProperties.Mercadopago("TEST-pk", "TEST-at", "whsec", clientId, clientSecret, redirect)
+                new AppProperties.Mercadopago("TEST-pk", "TEST-at", "whsec", clientId, clientSecret, redirect, false)
         );
     }
 }
