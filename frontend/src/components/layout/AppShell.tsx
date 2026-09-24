@@ -11,7 +11,7 @@ import { api } from "../../services/api";
 import { BrandLogo } from "../BrandLogo";
 import { AccountMenu } from "./AccountMenu";
 import { HeaderTools } from "./HeaderTools";
-import { navFor, SidebarBody, ThemeToggle, type PanelVariant } from "./panel-nav";
+import { navFor, SidebarBody, type PanelVariant } from "./panel-nav";
 
 export function AppShell({ variant }: { variant: PanelVariant }) {
   const { session, logout, loggingOut, setClinic } = useAuth();
@@ -113,7 +113,6 @@ export function AppShell({ variant }: { variant: PanelVariant }) {
         </div>
         <div className="flex min-w-0 flex-1 items-center justify-end gap-2 sm:gap-3">
           <HeaderTools variant={variant} />
-          <ThemeToggle />
           <div className="shrink-0 sm:min-w-[16rem]">
             <AccountMenu />
           </div>

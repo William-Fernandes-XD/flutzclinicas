@@ -1006,7 +1006,15 @@ export type AvaliacaoPendente = {
 export type AgendaSlot = { inicio: string; fim: string; estado: string; vagas?: number | null };
 export type AgendaDia = { data: string; estado: string; feriado: string | null; slots: AgendaSlot[]; nota: string | null };
 export type AgendaDisponibilidade = { empresaId: number; dias: AgendaDia[] };
-export type AgendaPet = { id: number; nome: string; especie: string };
+export type AgendaPet = {
+  id: number;
+  nome: string;
+  especie: string;
+  fotoUrl?: string | null;
+  raca?: string | null;
+  sexo?: string | null;
+  nascimento?: string | null;
+};
 export type AgendaServico = { id: number; nome: string; duracaoMinutos: number | null; preco: number | null };
 export type AgendaVacina = {
   id: number;

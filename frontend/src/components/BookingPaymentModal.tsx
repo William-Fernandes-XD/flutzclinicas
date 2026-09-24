@@ -321,7 +321,7 @@ function BookingCheckout({
           },
           customization: {
             visual: {
-              style: { theme: document.documentElement.classList.contains("dark") ? "dark" : "default" },
+              style: { theme: "default" },
             },
             paymentMethods: { maxInstallments: 12 },
           },

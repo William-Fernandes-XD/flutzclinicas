@@ -5,6 +5,13 @@ spring:
     url: jdbc:postgresql://${DATABASE_HOST:localhost}:${DATABASE_PORT:5432}/${DATABASE_NAME:flutz}?currentSchema=flutz
     username: ${DATABASE_USERNAME:postgres}
     password: ${DATABASE_PASSWORD:}
+    hikari:
+      maximum-pool-size: ${HIKARI_MAX_POOL:10}
+      minimum-idle: ${HIKARI_MIN_IDLE:2}
+      connection-timeout: 5000
+      idle-timeout: 300000
+      max-lifetime: 1800000
+      leak-detection-threshold: 30000
   jpa:
     hibernate:
       ddl-auto: none
@@ -25,6 +32,13 @@ spring:
     properties:
       mail.smtp.auth: ${MAIL_SMTP_AUTH:true}
       mail.smtp.starttls.enable: ${MAIL_STARTTLS:true}
+  task:
+    scheduling:
+      pool:
+        size: 3
+      shutdown:
+        await-termination: true
+        await-termination-period: 20s
 
   servlet:
     multipart:
@@ -33,6 +47,11 @@ spring:
 
 server:
   port: ${SERVER_PORT:8080}
+  tomcat:
+    threads:
+      max: ${TOMCAT_MAX_THREADS:100}
+    accept-count: 50
+    connection-timeout: 10s
 
 management:
   endpoints:

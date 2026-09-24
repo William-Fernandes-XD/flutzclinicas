@@ -45,10 +45,9 @@
   <body>
     <script>
       try {
-        if (localStorage.getItem("theme") === "dark") {
-          document.documentElement.classList.add("dark");
-          document.documentElement.style.colorScheme = "dark";
-        }
+        localStorage.setItem("theme", "light");
+        document.documentElement.classList.remove("dark");
+        document.documentElement.style.colorScheme = "light";
       } catch (error) {
         /* preferência de tema indisponível */
       }

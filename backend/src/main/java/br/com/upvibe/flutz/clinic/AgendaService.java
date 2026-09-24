@@ -642,23 +642,27 @@ public class AgendaService {
         if (auth.tutor()) {
             return jdbc.query(
                     """
-                    SELECT p.pet_id, p.nome_pet, e.descricao
+                    SELECT p.pet_id, p.nome_pet, e.descricao, p.foto_url, r.descricao AS raca,
+                           p.sexo, p.data_aniversario
                     FROM flutz.pet p
                     JOIN flutz.pet_especie e ON e.pet_especie_id = p.pet_especie_id
                     JOIN flutz.status s ON s.status_id = p.status_id
+                    LEFT JOIN flutz.pet_raca r ON r.pet_raca_id = p.pet_raca_id
                     WHERE p.cliente_id = ? AND LOWER(s.descricao) = 'ativo'
                     ORDER BY p.nome_pet
                     """,
-                    (rs, i) -> new PetAgenda(rs.getInt(1), rs.getString(2), rs.getString(3)),
+                    (rs, i) -> mapPetAgenda(rs),
                     auth.atorId()
             );
         }
         return jdbc.query(
                 """
-                SELECT p.pet_id, p.nome_pet, e.descricao
+                SELECT p.pet_id, p.nome_pet, e.descricao, p.foto_url, r.descricao AS raca,
+                       p.sexo, p.data_aniversario
                 FROM flutz.pet p
                 JOIN flutz.pet_especie e ON e.pet_especie_id = p.pet_especie_id
                 JOIN flutz.status s ON s.status_id = p.status_id
+                LEFT JOIN flutz.pet_raca r ON r.pet_raca_id = p.pet_raca_id
                 WHERE p.pet_id IN (
                     SELECT g.pet_id FROM flutz.agendamento g WHERE g.empresa_id = ?
                     UNION
@@ -667,8 +671,21 @@ public class AgendaService {
                   AND LOWER(s.descricao) = 'ativo'
                 ORDER BY p.nome_pet
                 """,
-                (rs, i) -> new PetAgenda(rs.getInt(1), rs.getString(2), rs.getString(3)),
+                (rs, i) -> mapPetAgenda(rs),
                 id, id
+        );
+    }
+
+    private static PetAgenda mapPetAgenda(java.sql.ResultSet rs) throws java.sql.SQLException {
+        Date nasc = rs.getDate("data_aniversario");
+        return new PetAgenda(
+                rs.getInt("pet_id"),
+                rs.getString("nome_pet"),
+                rs.getString("descricao"),
+                rs.getString("foto_url"),
+                rs.getString("raca"),
+                rs.getString("sexo"),
+                nasc != null ? nasc.toLocalDate().toString() : null
         );
     }
 
@@ -1612,7 +1629,9 @@ public class AgendaService {
     ) {
     }
 
-    public record PetAgenda(Integer id, String nome, String especie) {
+    public record PetAgenda(
+            Integer id, String nome, String especie, String fotoUrl, String raca, String sexo, String nascimento
+    ) {
     }
 
     public record ServicoAgenda(Integer id, String nome, Integer duracaoMinutos, BigDecimal preco) {

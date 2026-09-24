@@ -8,6 +8,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.slf4j.Logger;
@@ -33,13 +34,17 @@ public class NotificationController {
 
     private static final Logger log = LoggerFactory.getLogger(NotificationController.class);
 
+    /** Timeout longo ok; o custo real é o poll no DB — manter intervalo alto. */
     private static final long SSE_TIMEOUT_MS = 30L * 60L * 1000L;
-    private static final long SSE_POLL_SECONDS = 4L;
+    private static final long SSE_POLL_SECONDS = 20L;
+    /** Teto de conexões SSE simultâneas no processo (protege pool Hikari/Tomcat). */
+    private static final int SSE_MAX_CONEXOES = 150;
 
     private final NotificationService notifications;
+    private final AtomicInteger sseAtivas = new AtomicInteger(0);
     /** Scheduler compartilhado — evita criar uma thread por conexão SSE. */
     private final ScheduledExecutorService sseScheduler = Executors.newScheduledThreadPool(
-            2,
+            4,
             r -> {
                 Thread t = new Thread(r, "notif-sse");
                 t.setDaemon(true);
@@ -67,8 +72,8 @@ public class NotificationController {
     }
 
     /**
-     * Stream leve: mantém a conexão e emite quando a contagem de não lidas muda
-     * (checagem no servidor a cada poucos segundos).
+     * Stream leve: emite quando a contagem de não lidas muda.
+     * Poll no servidor a cada ~20s (não a cada poucos segundos).
      */
     @GetMapping(path = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter stream() {
@@ -83,18 +88,23 @@ public class NotificationController {
         if (destId == null) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Sem permissão");
         }
+        if (sseAtivas.get() >= SSE_MAX_CONEXOES) {
+            log.warn("SSE notificações: limite de {} conexões atingido — recusando", SSE_MAX_CONEXOES);
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Muitas conexões de notificação");
+        }
         String destTipo = notifications.destinatarioTipoPublico(auth);
 
         SseEmitter emitter = new SseEmitter(SSE_TIMEOUT_MS);
         AtomicLong ultimo = new AtomicLong(-1);
         AtomicBoolean closed = new AtomicBoolean(false);
-        // Holder para cancelar o poll a partir dos callbacks (future só existe após schedule).
         ScheduledFuture<?>[] pollRef = new ScheduledFuture<?>[1];
+        sseAtivas.incrementAndGet();
 
         Runnable markClosed = () -> {
             if (!closed.compareAndSet(false, true)) {
                 return;
             }
+            sseAtivas.decrementAndGet();
             ScheduledFuture<?> poll = pollRef[0];
             if (poll != null) {
                 poll.cancel(false);
@@ -116,8 +126,8 @@ public class NotificationController {
                     emitter.send(SseEmitter.event().comment("ping"));
                 }
             } catch (IOException ex) {
-                // Cliente/proxy encerrou a conexão. NÃO chamar emitter.complete():
-                // complete() tenta flush e gera AsyncRequestNotUsableException no async dispatch.
+                // Cliente/proxy encerrou. NÃO chamar emitter.complete():
+                // complete() tenta flush e gera AsyncRequestNotUsableException.
                 markClosed.run();
             } catch (Exception ex) {
                 if (isClientGone(ex)) {
@@ -135,7 +145,7 @@ public class NotificationController {
             try {
                 emitter.complete();
             } catch (Exception ignored) {
-                /* proxy já fechou — GlobalExceptionHandler engole AsyncRequestNotUsable */
+                /* proxy já fechou */
             }
         });
         emitter.onError(ex -> markClosed.run());
@@ -143,7 +153,6 @@ public class NotificationController {
         return emitter;
     }
 
-    /** Resposta SSE já inutilizável (aba fechada, proxy idle, timeout de rede). */
     private static boolean isClientGone(Throwable ex) {
         for (Throwable t = ex; t != null; t = t.getCause()) {
             String name = t.getClass().getName();

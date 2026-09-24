@@ -7,7 +7,8 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.springframework.dao.DataIntegrityViolationException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -19,6 +20,8 @@ import br.com.upvibe.flutz.security.AuthPrincipal;
 
 @Service
 public class NotificationService {
+
+    private static final Logger log = LoggerFactory.getLogger(NotificationService.class);
 
     public static final ZoneId ZONA = ZoneId.of("America/Sao_Paulo");
 
@@ -497,7 +500,11 @@ public class NotificationService {
         return destinatarioTipo(auth);
     }
 
-    @Transactional
+    /**
+     * Jobs em lote NÃO usam @Transactional único: no PostgreSQL um erro (ex.: unique)
+     * aborta a transação inteira (25P02) e envenena o restante do batch.
+     * Cada insert é autocommit + ON CONFLICT DO NOTHING.
+     */
     public int processarVacinasProximas() {
         LocalDate hoje = LocalDate.now(ZONA);
         LocalDate em3 = hoje.plusDays(3);
@@ -509,7 +516,6 @@ public class NotificationService {
     }
 
     /** Aviso D-3 de vencimento de fatura de assinatura para administradores da clínica. */
-    @Transactional
     public int processarAssinaturaD3() {
         LocalDate alvo = LocalDate.now(ZONA).plusDays(3);
         List<FaturaAssinaturaRow> faturas = jdbc.query(
@@ -531,31 +537,35 @@ public class NotificationService {
         );
         int criadas = 0;
         for (FaturaAssinaturaRow fatura : faturas) {
-            String valor = fatura.valor() == null
-                    ? ""
-                    : " (R$ " + fatura.valor().setScale(2, java.math.RoundingMode.HALF_UP).toPlainString().replace('.', ',') + ")";
-            String titulo = "Assinatura vence em 3 dias";
-            String corpo = "Faltam 3 dias para o pagamento da assinatura"
-                    + valor
-                    + ". Vencimento em "
-                    + fatura.vencimento().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy"))
-                    + ".";
-            for (Integer colaboradorId : administradoresClinica(fatura.empresaId())) {
-                String chave = "ASSINATURA_D3:" + fatura.faturaId() + ":" + colaboradorId;
-                if (criarSePermitido(
-                        "COLABORADOR", colaboradorId, fatura.empresaId(), "ASSINATURA_D3",
-                        titulo, corpo, "/app/assinatura",
-                        "FATURA", fatura.faturaId(), chave
-                )) {
-                    criadas++;
+            try {
+                String valor = fatura.valor() == null
+                        ? ""
+                        : " (R$ " + fatura.valor().setScale(2, java.math.RoundingMode.HALF_UP).toPlainString().replace('.', ',') + ")";
+                String titulo = "Assinatura vence em 3 dias";
+                String corpo = "Faltam 3 dias para o pagamento da assinatura"
+                        + valor
+                        + ". Vencimento em "
+                        + fatura.vencimento().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy"))
+                        + ".";
+                for (Integer colaboradorId : administradoresClinica(fatura.empresaId())) {
+                    String chave = "ASSINATURA_D3:" + fatura.faturaId() + ":" + colaboradorId;
+                    if (criarEmLote(
+                            "COLABORADOR", colaboradorId, fatura.empresaId(), "ASSINATURA_D3",
+                            titulo, corpo, "/app/assinatura",
+                            "FATURA", fatura.faturaId(), chave
+                    )) {
+                        criadas++;
+                    }
                 }
+            } catch (Exception ex) {
+                log.warn("Assinatura D-3: pulando fatura {}: {}", fatura.faturaId(), ex.toString());
             }
         }
         return criadas;
     }
 
-    @Transactional
-    public int processarLembretesAtendimento() {
+    /** Lembretes D-1 (amanhã) — job diário. */
+    public int processarLembretesAtendimentoD1() {
         int criadas = 0;
         List<LembreteRow> d1 = jdbc.query(
                 """
@@ -568,6 +578,19 @@ public class NotificationService {
                 WHERE st.codigo = 'CONFIRMADO'
                   AND (g.data_hora_inicio AT TIME ZONE 'America/Sao_Paulo')::date
                       = (CURRENT_TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')::date + 1
+                  AND (
+                    NOT EXISTS (
+                      SELECT 1 FROM flutz.notificacao n
+                      WHERE n.chave_unica = 'ATEND_D1_TUTOR:' || g.agendamento_id
+                    )
+                    OR (
+                      g.colaborador_id IS NOT NULL
+                      AND NOT EXISTS (
+                        SELECT 1 FROM flutz.notificacao n
+                        WHERE n.chave_unica = 'ATEND_D1_VET:' || g.agendamento_id
+                      )
+                    )
+                  )
                 """,
                 (rs, i) -> new LembreteRow(
                         rs.getInt("agendamento_id"),
@@ -580,30 +603,39 @@ public class NotificationService {
                 )
         );
         for (LembreteRow row : d1) {
-            String quando = formatarQuando(row.inicio().toString());
-            String corpoTutor = "Amanhã " + row.pet() + " tem atendimento em " + row.clinica()
-                    + " às " + quando + ".";
-            if (criarSePermitido(
-                    "CLIENTE", row.clienteId(), row.empresaId(), "ATENDIMENTO_D1",
-                    "Lembrete de atendimento", corpoTutor,
-                    "/cliente/agenda?id=" + row.id(), "AGENDAMENTO", row.id(),
-                    "ATEND_D1_TUTOR:" + row.id()
-            )) {
-                criadas++;
-            }
-            if (row.colaboradorId() != null) {
-                String corpoVet = "Amanhã você atende " + row.pet() + " em " + quando + ".";
-                if (criarSePermitido(
-                        "COLABORADOR", row.colaboradorId(), row.empresaId(), "ATENDIMENTO_D1",
-                        "Lembrete de atendimento", corpoVet,
-                        "/app/agenda?id=" + row.id(), "AGENDAMENTO", row.id(),
-                        "ATEND_D1_VET:" + row.id()
+            try {
+                String quando = formatarQuando(row.inicio().toString());
+                String corpoTutor = "Amanhã " + row.pet() + " tem atendimento em " + row.clinica()
+                        + " às " + quando + ".";
+                if (criarEmLote(
+                        "CLIENTE", row.clienteId(), row.empresaId(), "ATENDIMENTO_D1",
+                        "Lembrete de atendimento", corpoTutor,
+                        "/cliente/agenda?id=" + row.id(), "AGENDAMENTO", row.id(),
+                        "ATEND_D1_TUTOR:" + row.id()
                 )) {
                     criadas++;
                 }
+                if (row.colaboradorId() != null) {
+                    String corpoVet = "Amanhã você atende " + row.pet() + " em " + quando + ".";
+                    if (criarEmLote(
+                            "COLABORADOR", row.colaboradorId(), row.empresaId(), "ATENDIMENTO_D1",
+                            "Lembrete de atendimento", corpoVet,
+                            "/app/agenda?id=" + row.id(), "AGENDAMENTO", row.id(),
+                            "ATEND_D1_VET:" + row.id()
+                    )) {
+                        criadas++;
+                    }
+                }
+            } catch (Exception ex) {
+                log.warn("Lembrete D-1: pulando agendamento {}: {}", row.id(), ex.toString());
             }
         }
+        return criadas;
+    }
 
+    /** Lembretes H-1 do veterinário — job a cada 10 min, só quem ainda não recebeu. */
+    public int processarLembretesAtendimentoH1() {
+        int criadas = 0;
         List<LembreteRow> h1 = jdbc.query(
                 """
                 SELECT g.agendamento_id, g.empresa_id, g.cliente_id, g.colaborador_id,
@@ -616,6 +648,10 @@ public class NotificationService {
                   AND g.colaborador_id IS NOT NULL
                   AND g.data_hora_inicio BETWEEN (CURRENT_TIMESTAMP + INTERVAL '50 minutes')
                                             AND (CURRENT_TIMESTAMP + INTERVAL '70 minutes')
+                  AND NOT EXISTS (
+                    SELECT 1 FROM flutz.notificacao n
+                    WHERE n.chave_unica = 'ATEND_H1_VET:' || g.agendamento_id
+                  )
                 """,
                 (rs, i) -> new LembreteRow(
                         rs.getInt("agendamento_id"),
@@ -631,17 +667,26 @@ public class NotificationService {
             if (row.colaboradorId() == null) {
                 continue;
             }
-            String corpo = "Em cerca de 1 hora você atende " + row.pet() + " (" + formatarQuando(row.inicio().toString()) + ").";
-            if (criarSePermitido(
-                    "COLABORADOR", row.colaboradorId(), row.empresaId(), "ATENDIMENTO_H1",
-                    "Atendimento em 1 hora", corpo,
-                    "/app/agenda?id=" + row.id(), "AGENDAMENTO", row.id(),
-                    "ATEND_H1_VET:" + row.id()
-            )) {
-                criadas++;
+            try {
+                String corpo = "Em cerca de 1 hora você atende " + row.pet() + " (" + formatarQuando(row.inicio().toString()) + ").";
+                if (criarEmLote(
+                        "COLABORADOR", row.colaboradorId(), row.empresaId(), "ATENDIMENTO_H1",
+                        "Atendimento em 1 hora", corpo,
+                        "/app/agenda?id=" + row.id(), "AGENDAMENTO", row.id(),
+                        "ATEND_H1_VET:" + row.id()
+                )) {
+                    criadas++;
+                }
+            } catch (Exception ex) {
+                log.warn("Lembrete H-1: pulando agendamento {}: {}", row.id(), ex.toString());
             }
         }
         return criadas;
+    }
+
+    /** Compat: processa D-1 + H-1 (testes / chamada manual). */
+    public int processarLembretesAtendimento() {
+        return processarLembretesAtendimentoD1() + processarLembretesAtendimentoH1();
     }
 
     private int emitirVacinas(LocalDate dataDose, String tipo, LocalDate refHoje) {
@@ -683,27 +728,61 @@ public class NotificationService {
         );
         int criadas = 0;
         for (VacinaRow row : rows) {
-            String titulo;
-            String corpo;
-            if ("VACINA_D1".equals(tipo)) {
-                titulo = "Vacina amanhã";
-                corpo = "Amanhã o " + row.pet() + " será vacinado com " + row.vacina()
-                        + " no(a) " + row.clinica() + ". Já vá se preparando!!!";
-            } else {
-                titulo = "Vacina em 3 dias";
-                corpo = "Em 3 dias, " + row.pet() + " precisa tomar " + row.vacina()
-                        + " no(a) " + row.clinica() + ".";
-            }
-            String chave = tipo + ":" + row.historicoId() + ":" + refHoje;
-            if (criarSePermitido(
-                    "CLIENTE", row.clienteId(), row.empresaId(), tipo,
-                    titulo, corpo, "/cliente/vacinacao?doseId=" + row.historicoId(),
-                    "VACINA", row.historicoId(), chave
-            )) {
-                criadas++;
+            try {
+                String titulo;
+                String corpo;
+                if ("VACINA_D1".equals(tipo)) {
+                    titulo = "Vacina amanhã";
+                    corpo = "Amanhã o " + row.pet() + " será vacinado com " + row.vacina()
+                            + " no(a) " + row.clinica() + ". Já vá se preparando!!!";
+                } else {
+                    titulo = "Vacina em 3 dias";
+                    corpo = "Em 3 dias, " + row.pet() + " precisa tomar " + row.vacina()
+                            + " no(a) " + row.clinica() + ".";
+                }
+                String chave = tipo + ":" + row.historicoId() + ":" + refHoje;
+                if (criarEmLote(
+                        "CLIENTE", row.clienteId(), row.empresaId(), tipo,
+                        titulo, corpo, "/cliente/vacinacao?doseId=" + row.historicoId(),
+                        "VACINA", row.historicoId(), chave
+                )) {
+                    criadas++;
+                }
+            } catch (Exception ex) {
+                log.warn("Vacina {}: pulando histórico {}: {}", tipo, row.historicoId(), ex.toString());
             }
         }
         return criadas;
+    }
+
+    /**
+     * Isolamento para jobs em lote: falha de um item não interrompe o restante nem o processo.
+     * Não usar em fluxos de request (pagamento, auth) — aí o erro deve subir.
+     */
+    private boolean criarEmLote(
+            String destinatarioTipo,
+            Integer destinatarioId,
+            Integer empresaId,
+            String tipo,
+            String titulo,
+            String corpo,
+            String linkPath,
+            String referenciaTipo,
+            Integer referenciaId,
+            String chaveUnica
+    ) {
+        try {
+            return criarSePermitido(
+                    destinatarioTipo, destinatarioId, empresaId, tipo,
+                    titulo, corpo, linkPath, referenciaTipo, referenciaId, chaveUnica
+            );
+        } catch (Exception ex) {
+            log.warn(
+                    "Notificação em lote ignorada (tipo={}, chave={}): {}",
+                    tipo, chaveUnica, ex.toString()
+            );
+            return false;
+        }
     }
 
     private boolean criarSePermitido(
@@ -724,21 +803,20 @@ public class NotificationService {
         if (!permiteNotificacoes(destinatarioTipo, destinatarioId)) {
             return false;
         }
-        try {
-            jdbc.update(
-                    """
-                    INSERT INTO flutz.notificacao (
-                      destinatario_tipo, destinatario_id, empresa_id, tipo, titulo, corpo,
-                      link_path, referencia_tipo, referencia_id, chave_unica
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    destinatarioTipo, destinatarioId, empresaId, tipo, titulo, corpo,
-                    linkPath, referenciaTipo, referenciaId, chaveUnica
-            );
-            return true;
-        } catch (DataIntegrityViolationException ex) {
-            return false;
-        }
+        // ON CONFLICT: não lança em duplicata. NÃO engolir DataIntegrityViolation aqui —
+        // em @Transactional externo o PG fica abortado (25P02) mesmo com catch.
+        int inseridas = jdbc.update(
+                """
+                INSERT INTO flutz.notificacao (
+                  destinatario_tipo, destinatario_id, empresa_id, tipo, titulo, corpo,
+                  link_path, referencia_tipo, referencia_id, chave_unica
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT (chave_unica) WHERE chave_unica IS NOT NULL DO NOTHING
+                """,
+                destinatarioTipo, destinatarioId, empresaId, tipo, titulo, corpo,
+                linkPath, referenciaTipo, referenciaId, chaveUnica
+        );
+        return inseridas > 0;
     }
 
     private boolean permiteNotificacoes(String tipo, Integer id) {

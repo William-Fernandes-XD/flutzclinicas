@@ -23,7 +23,8 @@ import { api, type AppNotification } from "../../services/api";
 import { Modal } from "../ui/Modal";
 
 const NOTIF_SOUND_SRC = "/notification_sound.mp3";
-const NOTIF_POLL_MS = 2_500;
+/** Fallback só se SSE falhar — nunca martelar o backend a cada poucos segundos. */
+const NOTIF_FALLBACK_POLL_MS = 90_000;
 
 type Tutor = { id: number; nome: string };
 type Pet = { id: number; nome: string; especie: string; tutor: string };
@@ -72,17 +73,20 @@ export function HeaderTools({ variant }: { variant: "platform" | "clinic" | "cli
     queryKey: ["notificacoes"],
     queryFn: api.notificacoes,
     enabled: notesEnabled,
-    refetchInterval: notesEnabled ? NOTIF_POLL_MS : false,
-    refetchIntervalInBackground: true,
-    staleTime: 0,
+    // Query pesada (subselects): só sob demanda — SSE/focus invalidam; sem poll.
+    staleTime: 30_000,
+    refetchInterval: false,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   });
   const naoLidas = useQuery({
     queryKey: ["notificacoes-nao-lidas"],
     queryFn: api.notificacoesNaoLidas,
     enabled: notesEnabled,
-    refetchInterval: notesEnabled ? NOTIF_POLL_MS : false,
-    refetchIntervalInBackground: true,
-    staleTime: 0,
+    staleTime: 15_000,
+    refetchInterval: notesEnabled ? NOTIF_FALLBACK_POLL_MS : false,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   });
 
   function playNotifSound() {
@@ -148,8 +152,11 @@ export function HeaderTools({ variant }: { variant: "platform" | "clinic" | "cli
           const data = JSON.parse(String((event as MessageEvent).data ?? "{}")) as { naoLidas?: number };
           const total = typeof data.naoLidas === "number" ? data.naoLidas : null;
           const prev = prevNaoLidasRef.current;
-          if (total != null && prev != null && total > prev) {
-            playNotifSound();
+          if (total != null) {
+            if (prev != null && total > prev) {
+              playNotifSound();
+            }
+            prevNaoLidasRef.current = total;
           }
         } catch {
           /* ignore malformed SSE payload */

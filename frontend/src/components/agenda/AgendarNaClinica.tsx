@@ -4,11 +4,13 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { isoDate } from "../../lib/agenda";
 import { http, HttpError } from "../../lib/http";
+import { mediaUrl } from "../../lib/media";
 import { fileFromForm, uploadPerfilFoto } from "../../lib/perfil-foto";
+import { photoForSpecies } from "../../lib/pets-art";
 import { isTutor } from "../../lib/session";
 import { useAuth } from "../../providers/AuthProvider";
 import { useToast } from "../../providers/ToastProvider";
-import { api, type AgendaDia, type AgendaSlot } from "../../services/api";
+import { api, type AgendaDia, type AgendaPet, type AgendaSlot } from "../../services/api";
 import { Button } from "../ui/Button";
 import { ErrorState } from "../ui/EmptyState";
 import { Field, Input, Select } from "../ui/Field";
@@ -71,6 +73,7 @@ export function AgendarNaClinica({
   const [erro, setErro] = useState("");
   const [cadastroAberto, setCadastroAberto] = useState(false);
   const [cadastroErro, setCadastroErro] = useState("");
+  const [petsModalAberto, setPetsModalAberto] = useState(false);
 
   const { de, ate } = monthBounds(cursor);
   const tutor = isTutor(session);
@@ -114,6 +117,7 @@ export function AgendarNaClinica({
       toast.push("Pet cadastrado na sua conta.");
       setPetId(String(pet.id));
       setCadastroAberto(false);
+      setPetsModalAberto(false);
       setCadastroErro("");
       await queryClient.invalidateQueries({ queryKey: ["agenda-pets", empresaId] });
       await queryClient.invalidateQueries({ queryKey: ["pets"] });
@@ -142,6 +146,10 @@ export function AgendarNaClinica({
 
   const dias = disponibilidade.data?.dias ?? (preview ? demoDias(cursor) : []);
   const porData = useMemo(() => new Map(dias.map((item) => [item.data, item])), [dias]);
+  const petSelecionado = useMemo(
+    () => (pets.data ?? []).find((item) => String(item.id) === petId) ?? null,
+    [pets.data, petId],
+  );
   const escolhido = porData.get(dia);
   const slots = escolhido?.slots ?? [];
   const livres = slots.filter((item) => item.estado === "LIVRE");
@@ -341,15 +349,31 @@ export function AgendarNaClinica({
                 </Field>
                 <div>
                   <Field label="Pet">
-                    <Select value={petId} onChange={(event) => setPetId(event.target.value)}>
-                      <option value="">{pets.isLoading ? "Carregando…" : "Selecione"}</option>
-                      {(pets.data ?? []).map((pet) => (
-                        <option key={pet.id} value={pet.id}>
-                          {pet.nome}
-                          {pet.especie ? ` · ${pet.especie}` : ""}
-                        </option>
-                      ))}
-                    </Select>
+                    <button
+                      type="button"
+                      onClick={() => setPetsModalAberto(true)}
+                      className="flex w-full items-center gap-3 rounded-2xl bg-white px-3 py-2.5 text-left ring-1 ring-brand/15 transition hover:bg-brand-soft/40"
+                    >
+                      {petSelecionado ? (
+                        <>
+                          <img
+                            src={mediaUrl(petSelecionado.fotoUrl) || photoForSpecies(petSelecionado.especie, petSelecionado.id)}
+                            alt=""
+                            className="size-12 shrink-0 rounded-xl object-cover"
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-semibold text-ink">{petSelecionado.nome}</span>
+                            <span className="block truncate text-xs text-muted">
+                              {[petSelecionado.especie, petSelecionado.raca].filter(Boolean).join(" · ")}
+                            </span>
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-sm text-muted">
+                          {pets.isLoading ? "Carregando…" : "Selecionar pet"}
+                        </span>
+                      )}
+                    </button>
                   </Field>
                   <button
                     type="button"
@@ -549,6 +573,35 @@ export function AgendarNaClinica({
 
       {tutor && empresaId && !preview ? (
         <Modal
+          open={petsModalAberto}
+          title="Selecionar pet"
+          wide
+          onClose={() => setPetsModalAberto(false)}
+        >
+          {(pets.data ?? []).length ? (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {(pets.data ?? []).map((pet) => (
+                <PetSelectCard
+                  key={pet.id}
+                  pet={pet}
+                  selected={String(pet.id) === petId}
+                  onSelect={() => {
+                    setPetId(String(pet.id));
+                    setPetsModalAberto(false);
+                  }}
+                />
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted">
+              {pets.isLoading ? "Carregando pets…" : "Nenhum pet cadastrado ainda. Cadastre o primeiro para continuar."}
+            </p>
+          )}
+        </Modal>
+      ) : null}
+
+      {tutor && empresaId && !preview ? (
+        <Modal
           open={cadastroAberto}
           title="Cadastrar pet"
           onClose={() => {
@@ -586,6 +639,55 @@ export function AgendarNaClinica({
       ) : null}
     </section>
   );
+}
+
+function PetSelectCard({
+  pet,
+  selected,
+  onSelect,
+}: {
+  pet: AgendaPet;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const foto = mediaUrl(pet.fotoUrl) || photoForSpecies(pet.especie, pet.id);
+  const sexo =
+    pet.sexo === "M" ? "Macho" : pet.sexo === "F" ? "Fêmea" : pet.sexo === "I" ? "Sexo indefinido" : null;
+  const idade = idadePet(pet.nascimento);
+  const detalhes = [pet.especie, pet.raca, sexo, idade].filter(Boolean).join(" · ");
+
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={`flex min-w-0 overflow-hidden rounded-2xl text-left ring-1 transition ${
+        selected
+          ? "bg-brand-soft/50 ring-brand"
+          : "bg-white ring-brand/15 hover:bg-brand-soft/30 hover:ring-brand/40"
+      }`}
+    >
+      <div className="h-28 w-28 shrink-0 bg-brand-soft/40 sm:h-32 sm:w-32">
+        <img src={foto} alt="" className="size-full object-cover" />
+      </div>
+      <div className="flex min-w-0 flex-1 flex-col justify-center gap-1 px-4 py-3">
+        <p className="truncate text-base font-semibold text-ink">{pet.nome}</p>
+        {detalhes ? <p className="text-sm leading-snug text-muted">{detalhes}</p> : null}
+      </div>
+    </button>
+  );
+}
+
+function idadePet(nascimento?: string | null): string | null {
+  if (!nascimento) return null;
+  const nasc = new Date(`${nascimento}T12:00:00`);
+  if (Number.isNaN(nasc.getTime())) return null;
+  const agora = new Date();
+  let meses = (agora.getFullYear() - nasc.getFullYear()) * 12 + (agora.getMonth() - nasc.getMonth());
+  if (agora.getDate() < nasc.getDate()) meses -= 1;
+  if (meses < 0) return null;
+  if (meses < 12) return meses <= 1 ? "1 mês" : `${meses} meses`;
+  const anos = Math.floor(meses / 12);
+  return anos === 1 ? "1 ano" : `${anos} anos`;
 }
 
 function SlotButton({

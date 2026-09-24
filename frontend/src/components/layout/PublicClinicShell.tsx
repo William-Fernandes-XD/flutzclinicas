@@ -7,7 +7,7 @@ import { useAuth } from "../../providers/AuthProvider";
 import { BrandLogo } from "../BrandLogo";
 import { AccountMenu } from "./AccountMenu";
 import { HeaderTools } from "./HeaderTools";
-import { navFor, panelVariantFor, SidebarBody, ThemeToggle } from "./panel-nav";
+import { navFor, panelVariantFor, SidebarBody } from "./panel-nav";
 
 export function PublicClinicShell({ children }: { children: ReactNode }) {
   const { session, loading, logout, loggingOut } = useAuth();
@@ -63,7 +63,6 @@ export function PublicClinicShell({ children }: { children: ReactNode }) {
         </div>
         <div className="flex min-w-0 flex-1 items-center justify-end gap-2 sm:gap-3">
           <HeaderTools variant={variant} />
-          <ThemeToggle />
           <div className="shrink-0 sm:min-w-[16rem]">
             <AccountMenu />
           </div>

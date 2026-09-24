@@ -1,10 +1,9 @@
-import { Menu, Moon, Sun, X } from "lucide-react";
+import { Menu, X } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { homeFor } from "../../lib/session";
 import { useAuth } from "../../providers/AuthProvider";
-import { useTheme } from "../../providers/ThemeProvider";
 import { BrandLogo } from "../BrandLogo";
 import { Button } from "../ui/Button";
 import { PageContainer } from "./PageContainer";
@@ -18,7 +17,6 @@ const NAV = [
 ] as const;
 
 export function Header() {
-  const { theme, toggleTheme } = useTheme();
   const reduceMotion = useReducedMotion();
   const navigate = useNavigate();
   const { session, loading, logout, loggingOut } = useAuth();
@@ -53,14 +51,6 @@ export function Header() {
 
           <div className="flex shrink-0 items-center justify-end gap-2">
             <div className="hidden items-center gap-2 lg:flex">
-              <button
-                type="button"
-                onClick={toggleTheme}
-                className="inline-flex size-10 items-center justify-center rounded-xl text-muted hover:bg-brand-soft hover:text-brand dark:text-zinc-400 dark:hover:bg-zinc-800"
-                aria-label={theme === "dark" ? "Ativar modo claro" : "Ativar modo escuro"}
-              >
-                {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
-              </button>
               {loading ? null : session ? (
                 <>
                   <Button to={appHome} variant="ghost">
@@ -136,9 +126,6 @@ export function Header() {
                   </Button>
                 </>
               )}
-              <Button variant="ghost" className="w-full" onClick={toggleTheme}>
-                {theme === "dark" ? "Modo claro" : "Modo escuro"}
-              </Button>
             </div>
           </motion.div>
         ) : null}

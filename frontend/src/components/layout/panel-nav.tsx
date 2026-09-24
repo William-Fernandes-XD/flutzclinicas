@@ -12,14 +12,12 @@ import {
   LayoutDashboard,
   LifeBuoy,
   MapPin,
-  Moon,
   PawPrint,
   Search,
   Shield,
   ScrollText,
   Star,
   Stethoscope,
-  Sun,
   Syringe,
   Ticket,
   Users,
@@ -30,7 +28,6 @@ import {
 import type { ReactNode } from "react";
 import { NavLink } from "react-router-dom";
 import { isClinicAdmin, isPlatformAdmin, isTutor, type Session } from "../../lib/session";
-import { useTheme } from "../../providers/ThemeProvider";
 import { Button } from "../ui/Button";
 
 export type PanelVariant = "platform" | "clinic" | "client";
@@ -41,20 +38,6 @@ export function panelVariantFor(session: Session): PanelVariant {
   if (isPlatformAdmin(session) && !session.empresaId) return "platform";
   if (isTutor(session)) return "client";
   return "clinic";
-}
-
-export function ThemeToggle() {
-  const { theme, toggleTheme } = useTheme();
-  return (
-    <button
-      type="button"
-      onClick={toggleTheme}
-      className="inline-flex size-10 items-center justify-center rounded-xl text-muted hover:bg-brand-soft hover:text-brand dark:text-zinc-400 dark:hover:bg-zinc-800"
-      aria-label={theme === "dark" ? "Ativar modo claro" : "Ativar modo escuro"}
-    >
-      {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
-    </button>
-  );
 }
 
 export function labelFor(session: Session | null, variant?: PanelVariant): string {
