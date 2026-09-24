@@ -71,3 +71,28 @@ export function addDays(date: Date, days: number): Date {
   next.setDate(date.getDate() + days);
   return next;
 }
+
+/** Dias úteis (seg–sex) em (de, ate], timezone local do navegador. */
+export function contarDiasUteisEntre(de: Date, ate: Date): number {
+  const start = new Date(de.getFullYear(), de.getMonth(), de.getDate());
+  const end = new Date(ate.getFullYear(), ate.getMonth(), ate.getDate());
+  if (end <= start) return 0;
+  let n = 0;
+  for (let d = addDays(start, 1); d <= end; d = addDays(d, 1)) {
+    const dow = d.getDay();
+    if (dow !== 0 && dow !== 6) n += 1;
+  }
+  return n;
+}
+
+/**
+ * Pode cancelar?
+ * - AGUARDANDO_PAGAMENTO / SOLICITADO / AGUARDANDO_CLIENTE: sempre
+ * - CONFIRMADO: só com ≥ 1 dia útil até a data do atendimento
+ */
+export function podeCancelarAgendamento(statusCodigo: string | null | undefined, inicioIso: string): boolean {
+  const code = (statusCodigo ?? "").toUpperCase();
+  if (["SOLICITADO", "AGUARDANDO_PAGAMENTO", "AGUARDANDO_CLIENTE"].includes(code)) return true;
+  if (code !== "CONFIRMADO") return false;
+  return contarDiasUteisEntre(new Date(), new Date(inicioIso)) >= 1;
+}

@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { CalendarDays, UserRound } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import { AgendaKanban } from "../../components/agenda/AgendaKanban";
@@ -355,23 +356,51 @@ export function AgendaPage() {
       <Modal
         open={open}
         title="Novo agendamento"
-        onClose={() => setOpen(false)}
+        description="Preencha os dados abaixo para agendar um atendimento."
+        icon={<CalendarDays className="size-5" aria-hidden />}
+        onClose={() => {
+          setOpen(false);
+          setError("");
+        }}
         footer={
-          <Button type="submit" form="agenda-form" busy={criar.isPending} busyLabel="Marcando…">
-            Marcar
-          </Button>
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                setOpen(false);
+                setError("");
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button type="submit" form="agenda-form" busy={criar.isPending} busyLabel="Marcando…">
+              <CalendarDays className="size-4" />
+              Marcar agendamento
+            </Button>
+          </div>
         }
       >
         <form id="agenda-form" onSubmit={onSubmit} className="grid gap-5">
-          <FormSection title="Quem">
+          <FormSection
+            title="Quem"
+            description="Informe o CPF do tutor responsável pelos pets."
+            icon={<UserRound className="size-4" aria-hidden />}
+            columns={1}
+          >
             <TutorCpfPetPicker />
           </FormSection>
-          <FormSection title="Quando">
-            <Field label="Início">
+          <FormSection
+            title="Quando"
+            description="Selecione a data e o horário do atendimento."
+            icon={<CalendarDays className="size-4" aria-hidden />}
+            columns={1}
+          >
+            <Field label="Início *">
               <Input name="inicio" type="datetime-local" required />
             </Field>
-            <Field label="Observações">
-              <Textarea name="observacoes" />
+            <Field label="Observações (opcional)">
+              <Textarea name="observacoes" placeholder="Ex: Anotar sintomas, preferências do tutor, etc." />
             </Field>
           </FormSection>
           {error ? <ErrorState message={error} /> : null}
@@ -458,7 +487,23 @@ function CaixaSolicitacoes({ itens }: { itens: AgendaSolicitacao[] }) {
                     </Button>
                   </>
                 ) : item.statusCodigo === "AGUARDANDO_PAGAMENTO" ? (
-                  <p className="text-xs text-amber-800">Aguardando o tutor concluir o pagamento.</p>
+                  <>
+                    <p className="text-xs text-amber-800">Aguardando o tutor concluir o pagamento.</p>
+                    <Button
+                      variant="ghost"
+                      busy={acao.isPending}
+                      busyLabel="Cancelando…"
+                      onClick={() =>
+                        acao.mutate({
+                          id: item.id,
+                          nome: "cancelar",
+                          body: { motivo: "Cancelado pela clínica enquanto aguardava pagamento" },
+                        })
+                      }
+                    >
+                      Cancelar
+                    </Button>
+                  </>
                 ) : (
                   <p className="text-xs text-muted">Aguardando o tutor responder a proposta.</p>
                 )}

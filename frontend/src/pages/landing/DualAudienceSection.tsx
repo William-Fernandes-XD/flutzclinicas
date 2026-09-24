@@ -11,8 +11,8 @@ export function DualAudienceSection() {
         <FadeIn>
           <SectionTitle
             eyebrow="Para você"
-            title="Dois caminhos. Um Flutz."
-            description="Tutores entram de graça para achar clínicas e pedir horários. Clínicas contratam a plataforma para operar o dia a dia."
+            title="Gestão para clínicas veterinárias e cuidado para tutores"
+            description="O Flutz foi criado para dois públicos: clínicas que precisam de um sistema de gestão veterinária, e tutores que querem encontrar clínicas e pedir horários."
           />
         </FadeIn>
         <div className="mt-10 grid grid-cols-1 gap-5 sm:mt-12 lg:grid-cols-2">

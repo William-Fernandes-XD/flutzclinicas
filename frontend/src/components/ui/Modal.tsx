@@ -5,6 +5,8 @@ import { X } from "lucide-react";
 export function Modal({
   open,
   title,
+  description,
+  icon,
   children,
   onClose,
   footer,
@@ -12,6 +14,8 @@ export function Modal({
 }: {
   open: boolean;
   title: string;
+  description?: string;
+  icon?: ReactNode;
   children: ReactNode;
   onClose: () => void;
   footer?: ReactNode;
@@ -44,10 +48,20 @@ export function Modal({
           wide ? "max-h-[min(92svh,52rem)] w-full max-w-4xl" : "max-h-[min(92svh,40rem)] w-full max-w-lg"
         }`}
       >
-        <div className="flex min-w-0 items-center justify-between gap-3 border-b border-line px-5 py-4 dark:border-zinc-800">
-          <h2 id="modal-title" className="min-w-0 truncate text-lg font-semibold">
-            {title}
-          </h2>
+        <div className="flex min-w-0 items-start justify-between gap-3 border-b border-line px-5 py-4 dark:border-zinc-800">
+          <div className="flex min-w-0 items-start gap-3">
+            {icon ? (
+              <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-xl bg-brand-soft text-brand">
+                {icon}
+              </span>
+            ) : null}
+            <div className="min-w-0">
+              <h2 id="modal-title" className="min-w-0 truncate text-lg font-semibold text-ink dark:text-white">
+                {title}
+              </h2>
+              {description ? <p className="mt-1 text-sm leading-relaxed text-muted">{description}</p> : null}
+            </div>
+          </div>
           <button
             type="button"
             onClick={onClose}

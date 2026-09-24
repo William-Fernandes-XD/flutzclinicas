@@ -328,21 +328,54 @@ public class AgendaService {
     public Solicitacao cancelar(Integer id, MotivoReq req) {
         AuthPrincipal auth = AuthHolder.current();
         Solicitacao atual = detalhe(id);
+        validarPrazoCancelamento(atual);
         if (auth.tutor()) {
             exigirCodigo(atual, CANCELA_TUTOR.toArray(String[]::new));
-            Instant inicio = Instant.parse(atual.inicio());
-            Integer minutos = jdbc.query(
-                    "SELECT cancelamento_antecedencia_minutos FROM flutz.empresa WHERE empresa_id = ?",
-                    rs -> rs.next() ? (Integer) rs.getObject(1) : null,
-                    atual.empresaId()
-            );
-            if (minutos != null && Instant.now().plusSeconds(minutos * 60L).isAfter(inicio)) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Fora do prazo de cancelamento. Fale com a clínica.");
-            }
             return mudar(id, atual, "CANCELADO_CLIENTE", req == null ? null : req.motivo());
         }
         exigirCodigo(atual, "SOLICITADO", "CONFIRMADO", "AGUARDANDO_CLIENTE", "AGUARDANDO_PAGAMENTO");
         return mudar(id, atual, "CANCELADO_CLINICA", req == null ? null : req.motivo());
+    }
+
+    /**
+     * Regras de cancelamento:
+     * - AGUARDANDO_PAGAMENTO / SOLICITADO / AGUARDANDO_CLIENTE: a qualquer momento (tutor ou clínica).
+     * - CONFIRMADO: somente com pelo menos 1 dia útil de antecedência até a data do atendimento.
+     */
+    private void validarPrazoCancelamento(Solicitacao atual) {
+        String codigo = atual.statusCodigo();
+        if ("AGUARDANDO_PAGAMENTO".equals(codigo)
+                || "SOLICITADO".equals(codigo)
+                || "AGUARDANDO_CLIENTE".equals(codigo)) {
+            return;
+        }
+        if (!"CONFIRMADO".equals(codigo)) {
+            return;
+        }
+        Instant inicio = Instant.parse(atual.inicio());
+        if (!temPeloMenosUmDiaUtilAntes(inicio)) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Cancelamento só é permitido com pelo menos 1 dia útil de antecedência."
+            );
+        }
+    }
+
+    /** Conta dias úteis (seg–sex) em (hoje, dataAtendimento]. */
+    private boolean temPeloMenosUmDiaUtilAntes(Instant inicio) {
+        LocalDate hoje = LocalDate.now(ZONA);
+        LocalDate diaAtendimento = inicio.atZone(ZONA).toLocalDate();
+        if (!diaAtendimento.isAfter(hoje)) {
+            return false;
+        }
+        int uteis = 0;
+        for (LocalDate d = hoje.plusDays(1); !d.isAfter(diaAtendimento); d = d.plusDays(1)) {
+            DayOfWeek dow = d.getDayOfWeek();
+            if (dow != DayOfWeek.SATURDAY && dow != DayOfWeek.SUNDAY) {
+                uteis++;
+            }
+        }
+        return uteis >= 1;
     }
 
     @Transactional

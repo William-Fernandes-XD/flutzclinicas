@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { Search, UserRound } from "lucide-react";
 import { useState } from "react";
 import { http, HttpError } from "../../lib/http";
 import { Button } from "../ui/Button";
@@ -9,6 +10,14 @@ export type TutorResumo = { id: number; nome: string; cpf: string; email: string
 export type PetResumo = { id: number; nome: string; especie?: string; raca?: string | null; clienteId: number };
 
 type Busca = { tutor: TutorResumo; pets: PetResumo[] };
+
+function maskCpf(value: string): string {
+  const digits = value.replace(/\D/g, "").slice(0, 11);
+  return digits
+    .replace(/(\d{3})(\d)/, "$1.$2")
+    .replace(/(\d{3})(\d)/, "$1.$2")
+    .replace(/(\d{3})(\d{1,2})$/, "$1-$2");
+}
 
 export function TutorCpfPetPicker({
   tutorField = "clienteId",
@@ -44,16 +53,34 @@ export function TutorCpfPetPicker({
   return (
     <div className="grid gap-3 sm:col-span-2">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-        <Field label="CPF do tutor">
-          <Input
-            value={cpf}
-            inputMode="numeric"
-            autoComplete="off"
-            placeholder="000.000.000-00"
-            onChange={(event) => setCpf(event.target.value)}
-          />
+        <Field label="CPF do tutor *" hint="Digite o CPF para localizar o tutor e os pets da conta dele.">
+          <div className="relative">
+            <UserRound className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted" aria-hidden />
+            <Input
+              value={cpf}
+              inputMode="numeric"
+              autoComplete="off"
+              placeholder="000.000.000-00"
+              className="pl-9"
+              onChange={(event) => setCpf(maskCpf(event.target.value))}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  onBuscar();
+                }
+              }}
+            />
+          </div>
         </Field>
-        <Button type="button" variant="secondary" busy={busca.isFetching} busyLabel="Buscando…" onClick={onBuscar}>
+        <Button
+          type="button"
+          variant="secondary"
+          busy={busca.isFetching}
+          busyLabel="Buscando…"
+          onClick={onBuscar}
+          className="shrink-0"
+        >
+          <Search className="size-4" />
           Buscar pets
         </Button>
       </div>
@@ -62,37 +89,37 @@ export function TutorCpfPetPicker({
         <ErrorState message={busca.error instanceof HttpError ? busca.error.message : "Não foi possível buscar o tutor."} />
       ) : null}
       {tutor ? (
-        <div className="rounded-2xl border border-line px-4 py-3 dark:border-zinc-700">
-          <p className="text-sm font-semibold">{tutor.nome}</p>
+        <div className="rounded-2xl border border-brand/20 bg-white px-4 py-3 dark:border-zinc-700 dark:bg-zinc-900">
+          <p className="text-sm font-semibold text-ink dark:text-white">{tutor.nome}</p>
           <p className="text-xs text-muted">{tutor.email || "Sem e-mail"}</p>
           {!pets.length ? (
             <p className="mt-2 text-sm text-muted">
               Este tutor ainda não cadastrou pets. O cadastro do animal é feito pelo próprio tutor.
             </p>
           ) : (
-            <Field label="Pet">
-              <select
-                name={petField}
-                required
-                value={petId}
-                onChange={(event) => setPetId(event.target.value)}
-                className="w-full min-w-0 rounded-xl border border-line bg-white px-3 py-2.5 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-              >
-                <option value="">Selecione o pet</option>
-                {pets.map((pet) => (
-                  <option key={pet.id} value={pet.id}>
-                    {pet.nome}
-                    {pet.especie ? ` · ${pet.especie}` : ""}
-                    {pet.raca ? ` · ${pet.raca}` : ""}
-                  </option>
-                ))}
-              </select>
-            </Field>
+            <div className="mt-3">
+              <Field label="Pet *">
+                <select
+                  name={petField}
+                  required
+                  value={petId}
+                  onChange={(event) => setPetId(event.target.value)}
+                  className="w-full min-w-0 rounded-xl border border-line bg-white px-3 py-2.5 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+                >
+                  <option value="">Selecione o pet</option>
+                  {pets.map((pet) => (
+                    <option key={pet.id} value={pet.id}>
+                      {pet.nome}
+                      {pet.especie ? ` · ${pet.especie}` : ""}
+                      {pet.raca ? ` · ${pet.raca}` : ""}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </div>
           )}
         </div>
-      ) : (
-        <p className="text-sm text-muted">Digite o CPF para localizar o tutor e os pets da conta dele.</p>
-      )}
+      ) : null}
       <input type="hidden" name={tutorField} value={tutor?.id ?? ""} />
       {pets.length === 0 ? <input type="hidden" name={petField} value="" /> : null}
     </div>

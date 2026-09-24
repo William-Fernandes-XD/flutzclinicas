@@ -95,8 +95,8 @@ export function FeaturesSection() {
         <FadeIn>
           <SectionTitle
             eyebrow="Funcionalidades"
-            title="O que a clínica opera — e o que o tutor usa"
-            description="A clínica concentra a operação. O tutor entra, encontra empresas próximas e pede horário. Somente o que o produto já prevê."
+            title="Tudo o que sua clínica precisa para a operação"
+            description="Recursos reais do sistema: a clínica concentra a gestão veterinária; o tutor encontra empresas próximas e pede horário. Sem inventar o que o produto ainda não faz."
           />
         </FadeIn>
         <div className="mt-10 grid grid-cols-1 gap-5 sm:mt-12 sm:grid-cols-2 lg:grid-cols-3">

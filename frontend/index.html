@@ -3,38 +3,73 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>Flutz | Gestão completa para sua clínica veterinária</title>
+    <title>Flutz | SaaS de Gestão para Clínicas Veterinárias</title>
     <meta
       name="description"
-      content="O Flutz é o SaaS de gestão para clínicas veterinárias: tutores, pets, agenda, atendimentos, vacinação, página pública, avaliações, chat, doações e pagamentos — com dados isolados por clínica."
+      content="Conheça o Flutz, um SaaS desenvolvido para clínicas veterinárias. Centralize a gestão da clínica, organize a operação e atenda tutores em uma plataforma na nuvem."
     />
+    <meta name="robots" content="index, follow" />
     <link rel="canonical" href="%CANONICAL_URL%" />
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta property="og:type" content="website" />
     <meta property="og:locale" content="pt_BR" />
     <meta property="og:site_name" content="Flutz" />
-    <meta
-      property="og:title"
-      content="Flutz | Gestão completa para sua clínica veterinária"
-    />
+    <meta property="og:title" content="Flutz | SaaS de Gestão para Clínicas Veterinárias" />
     <meta
       property="og:description"
-      content="Plataforma de gestão para clínicas veterinárias: operação, página pública e assinatura em um só lugar."
+      content="Software SaaS para clínicas veterinárias: gestão da operação, agenda, pets, atendimentos e página pública em um só lugar."
     />
     <meta property="og:image" content="%OG_IMAGE_URL%" />
     <meta property="og:url" content="%CANONICAL_URL%" />
-    <meta name="twitter:card" content="summary" />
-    <meta
-      name="twitter:title"
-      content="Flutz | Gestão completa para sua clínica veterinária"
-    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Flutz | SaaS de Gestão para Clínicas Veterinárias" />
     <meta
       name="twitter:description"
-      content="SaaS de gestão para clínicas veterinárias, com isolamento de dados por empresa."
+      content="SaaS de gestão para clínicas veterinárias: centralize a operação da clínica em uma plataforma na nuvem."
     />
     <meta name="twitter:image" content="%OG_IMAGE_URL%" />
     <meta name="theme-color" content="#7828C8" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "Organization",
+            "@id": "%SITE_URL%/#organization",
+            "name": "Flutz",
+            "url": "%SITE_URL%/",
+            "logo": "%OG_IMAGE_URL%",
+            "parentOrganization": {
+              "@type": "Organization",
+              "name": "UpVibe",
+              "url": "https://www.upvibe.blog.br/"
+            },
+            "sameAs": ["https://www.instagram.com/flutzclinicas/"]
+          },
+          {
+            "@type": "SoftwareApplication",
+            "@id": "%SITE_URL%/#software",
+            "name": "Flutz",
+            "applicationCategory": "BusinessApplication",
+            "operatingSystem": "Web",
+            "description": "SaaS de gestão para clínicas veterinárias: software na nuvem para operação da clínica, agenda, pets, atendimentos, vacinação e página pública.",
+            "url": "%SITE_URL%/",
+            "provider": { "@id": "%SITE_URL%/#organization" },
+            "inLanguage": "pt-BR"
+          },
+          {
+            "@type": "WebSite",
+            "@id": "%SITE_URL%/#website",
+            "name": "Flutz",
+            "url": "%SITE_URL%/",
+            "description": "Plataforma SaaS para clínicas veterinárias e tutores.",
+            "inLanguage": "pt-BR",
+            "publisher": { "@id": "%SITE_URL%/#organization" }
+          }
+        ]
+      }
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -52,6 +87,16 @@
         /* preferência de tema indisponível */
       }
     </script>
+    <noscript>
+      <div style="max-width:42rem;margin:2rem auto;padding:1.5rem;font-family:system-ui,sans-serif;line-height:1.5">
+        <h1>Flutz: SaaS de gestão para clínicas veterinárias</h1>
+        <p>
+          O Flutz é um SaaS desenvolvido para clínicas veterinárias. Centralize a gestão da clínica,
+          organize a operação e atenda tutores em uma plataforma na nuvem. Ative o JavaScript para
+          usar o site completo.
+        </p>
+      </div>
+    </noscript>
     <div id="boot-splash" aria-busy="true" aria-live="polite">
       <style>
         #boot-splash {
@@ -109,7 +154,7 @@
           }
         }
       </style>
-      <img class="boot-logo" src="/logo-flutz-boot.png" alt="Flutz" width="320" height="88" />
+      <img class="boot-logo" src="/logo-flutz-boot.png" alt="Flutz — SaaS para clínicas veterinárias" width="320" height="88" />
       <div class="boot-track"><div class="boot-bar"></div></div>
     </div>
     <div id="root"></div>

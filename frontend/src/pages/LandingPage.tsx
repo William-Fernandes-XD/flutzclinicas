@@ -2,6 +2,7 @@ import { PageContainer } from "../components/layout/PageContainer";
 import { Button } from "../components/ui/Button";
 import { CTA } from "../components/ui/CTA";
 import { FadeIn } from "../components/ui/FadeIn";
+import { AboutSection } from "./landing/AboutSection";
 import { BenefitsSection } from "./landing/BenefitsSection";
 import { DualAudienceSection } from "./landing/DualAudienceSection";
 import { FaqSection } from "./landing/FaqSection";
@@ -21,13 +22,14 @@ export function LandingPage() {
       <FeaturesSection />
       <BenefitsSection />
       <HowItWorksSection />
+      <AboutSection />
       <FaqSection />
-      <section className="py-12 sm:py-20">
+      <div className="py-12 sm:py-20">
         <FadeIn>
           <PageContainer>
             <CTA
-              title="Comece pelo lado que é o seu"
-              description="Tutor cria a conta e encontra clínicas. Clínica começa com 14 dias gratuitos para testar o Flutz."
+              title="Comece a utilizar o Flutz"
+              description="Tutor cria a conta e encontra clínicas. Clínica começa com 14 dias gratuitos para testar o SaaS de gestão do Flutz."
               actionLabel="Criar conta de tutor"
               to="/cadastro?tipo=tutor"
             >
@@ -42,7 +44,7 @@ export function LandingPage() {
             </CTA>
           </PageContainer>
         </FadeIn>
-      </section>
+      </div>
     </>
   );
 }

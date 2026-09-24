@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { BookingPaymentModal } from "../BookingPaymentModal";
-import { statusAgenda, tomStatus } from "../../lib/agenda";
+import { statusAgenda, tomStatus, podeCancelarAgendamento } from "../../lib/agenda";
 import { http, HttpError } from "../../lib/http";
 import { api } from "../../services/api";
 import { useToast } from "../../providers/ToastProvider";
@@ -79,7 +79,7 @@ export function AppointmentDetailModal({
   const fimPadrao = item.fim ? new Date(item.fim) : new Date(inicio.getTime() + 30 * 60 * 1000);
   const codigo = (item.statusCodigo ?? "").toUpperCase();
   const podeEditar = clinicMode && ["SOLICITADO", "CONFIRMADO"].includes(codigo);
-  const podeCancelar = ["SOLICITADO", "CONFIRMADO", "AGUARDANDO_PAGAMENTO", "AGUARDANDO_CLIENTE"].includes(codigo);
+  const podeCancelar = podeCancelarAgendamento(codigo, item.inicio);
   const podeConcluir = clinicMode && codigo === "CONFIRMADO";
   const podePagar = !clinicMode && codigo === "AGUARDANDO_PAGAMENTO";
   const acaoSalvar = codigo === "CONFIRMADO" ? "reatribuir" : "confirmar";
@@ -156,9 +156,16 @@ export function AppointmentDetailModal({
           </div>
         </div>
 
-        {codigo === "AGUARDANDO_PAGAMENTO" && clinicMode ? (
+        {codigo === "AGUARDANDO_PAGAMENTO" ? (
           <p className="mb-4 rounded-2xl bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
-            Aguardando o tutor concluir o pagamento para confirmar o horário.
+            {clinicMode
+              ? "Aguardando o tutor concluir o pagamento. Clínica ou tutor podem cancelar neste status a qualquer momento."
+              : "Pagamento pendente. Você pode pagar agora ou cancelar o agendamento a qualquer momento enquanto estiver aguardando o pagamento."}
+          </p>
+        ) : null}
+        {codigo === "CONFIRMADO" && !podeCancelar ? (
+          <p className="mb-4 rounded-2xl bg-zinc-50 px-3 py-2 text-sm text-muted dark:bg-zinc-800">
+            Cancelamento disponível somente com pelo menos 1 dia útil de antecedência.
           </p>
         ) : null}
 

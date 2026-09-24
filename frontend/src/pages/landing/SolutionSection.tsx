@@ -32,8 +32,8 @@ export function SolutionSection() {
         <FadeIn>
           <SectionTitle
             eyebrow="A solução"
-            title="Flutz aproxima o tutor da clínica — e organiza a operação"
-            description="Quem tem pet cria a conta e encontra clínicas. Quem tem clínica cadastra a empresa, escolhe o plano e passa a usar agenda, atendimentos, vacinação e — conforme o plano — página pública, chat, doações e recebimentos."
+            title="Como o Flutz ajuda a clínica veterinária"
+            description="Como SaaS de gestão, o Flutz aproxima o tutor da clínica e organiza a operação em um ambiente próprio: agenda, atendimentos, vacinação e — conforme o plano — página pública, chat, doações e recebimentos."
           />
         </FadeIn>
         <div className="mt-10 grid grid-cols-1 gap-5 sm:mt-12 md:grid-cols-3">

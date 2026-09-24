@@ -39,19 +39,30 @@ export function Select(props: SelectHTMLAttributes<HTMLSelectElement>) {
 export function FormSection({
   title,
   description,
+  icon,
+  columns = 2,
   children,
 }: {
   title: string;
   description?: string;
+  icon?: ReactNode;
+  columns?: 1 | 2;
   children: ReactNode;
 }) {
   return (
-    <section className="grid gap-4">
-      <div>
-        <h2 className="text-sm font-semibold text-ink dark:text-white">{title}</h2>
-        {description ? <p className="mt-1 text-xs leading-relaxed text-muted">{description}</p> : null}
+    <section className="grid gap-4 rounded-2xl border border-line/80 bg-[#faf8fc]/80 p-4 dark:border-zinc-800 dark:bg-zinc-950/40">
+      <div className="flex min-w-0 items-start gap-3">
+        {icon ? (
+          <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-xl bg-brand-soft text-brand">
+            {icon}
+          </span>
+        ) : null}
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold text-ink dark:text-white">{title}</h3>
+          {description ? <p className="mt-1 text-xs leading-relaxed text-muted">{description}</p> : null}
+        </div>
       </div>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">{children}</div>
+      <div className={`grid grid-cols-1 gap-3 ${columns === 2 ? "sm:grid-cols-2" : ""}`}>{children}</div>
     </section>
   );
 }

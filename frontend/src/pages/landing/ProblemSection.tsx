@@ -32,8 +32,8 @@ export function ProblemSection() {
         <FadeIn>
           <SectionTitle
             eyebrow="O problema"
-            title="Quem cuida do pet e quem gerencia a clínica sentem a mesma falta"
-            description="Tutores precisam chegar até a clínica. A clínica precisa manter tutores, pets, horários e o prontuário no mesmo lugar."
+            title="O que a gestão de clínica veterinária ainda deixa solto"
+            description="Tutores têm dificuldade de chegar até a clínica. A clínica precisa manter tutores, pets, horários e o histórico do pet no mesmo software — não em ferramentas espalhadas."
           />
         </FadeIn>
         <div className="mt-10 grid grid-cols-1 gap-5 sm:mt-12 md:grid-cols-3">

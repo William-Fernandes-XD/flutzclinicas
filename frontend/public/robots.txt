@@ -1,6 +1,18 @@
 User-agent: *
 Allow: /
+Allow: /privacidade
+Allow: /termos
+Allow: /clinica/
+
 Disallow: /app
+Disallow: /app/
+Disallow: /admin
+Disallow: /admin/
+Disallow: /cliente
+Disallow: /cliente/
+Disallow: /login
+Disallow: /cadastro
+Disallow: /recuperar-senha
 Disallow: /403
 
-Sitemap: /sitemap.xml
+Sitemap: %SITE_URL%/sitemap.xml

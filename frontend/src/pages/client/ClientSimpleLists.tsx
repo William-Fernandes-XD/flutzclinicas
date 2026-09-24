@@ -26,7 +26,7 @@ import { Button } from "../../components/ui/Button";
 import { EmptyState, LoadingState } from "../../components/ui/EmptyState";
 import { Surface } from "../../components/ui/Field";
 import { Modal } from "../../components/ui/Modal";
-import { corStatusAgenda, statusAgenda, tomStatus } from "../../lib/agenda";
+import { corStatusAgenda, statusAgenda, tomStatus, podeCancelarAgendamento } from "../../lib/agenda";
 import { exportTable } from "../../lib/export";
 import { api, type AgendaSolicitacao, type AvaliacaoPendente, type VaccinationRow } from "../../services/api";
 import { useToast } from "../../providers/ToastProvider";
@@ -475,7 +475,7 @@ export function ClientAgendaPage() {
                                 : undefined
                             }
                             onCancel={
-                              ["SOLICITADO", "CONFIRMADO", "AGUARDANDO_PAGAMENTO"].includes(item.statusCodigo)
+                              podeCancelarAgendamento(item.statusCodigo, item.inicio)
                                 ? () => acao.mutate({ id: item.id, nome: "cancelar" })
                                 : undefined
                             }

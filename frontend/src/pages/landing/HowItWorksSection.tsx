@@ -48,8 +48,8 @@ export function HowItWorksSection() {
         <FadeIn>
           <SectionTitle
             eyebrow="Como funciona"
-            title="Um começo para cada lado"
-            description="O tutor entra de graça. A clínica vê os planos só quando decide cadastrar a empresa."
+            title="Comece a utilizar o Flutz"
+            description="O tutor entra de graça. A clínica vê os planos só quando decide cadastrar a empresa e começar a usar o software de gestão."
           />
         </FadeIn>
         <div className="mt-10 grid grid-cols-1 gap-10 sm:mt-12 lg:grid-cols-2">

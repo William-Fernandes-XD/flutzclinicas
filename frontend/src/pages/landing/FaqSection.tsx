@@ -10,7 +10,7 @@ const faqs = [
   {
     question: "O que é o Flutz?",
     answer:
-      "O Flutz é um SaaS para clínicas veterinárias e para os tutores que as procuram. Cada clínica tem o próprio ambiente para tutores, pets, equipe, serviços, agenda, atendimentos, vacinação, página pública, avaliações, chat, doações e pagamentos. O tutor cria a conta, encontra clínicas e solicita horários.",
+      "O Flutz é um SaaS (software como serviço) para clínicas veterinárias, oferecido pela UpVibe. Cada clínica tem o próprio ambiente de gestão: tutores, pets, equipe, serviços, agenda, atendimentos, vacinação, página pública, avaliações, chat, doações e pagamentos. O tutor cria a conta, encontra clínicas e solicita horários.",
   },
   {
     question: "Posso me cadastrar como tutor?",

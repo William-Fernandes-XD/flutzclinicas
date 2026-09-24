@@ -41,8 +41,8 @@ export function BenefitsSection() {
         <FadeIn>
           <SectionTitle
             eyebrow="Benefícios"
-            title="Feito para quem leva o pet e para quem recebe"
-            description="O Flutz conecta o tutor à clínica e, do outro lado, concentra a operação e a apresentação pública da empresa."
+            title="Uma plataforma criada para a rotina veterinária"
+            description="Por que uma clínica veterinária usaria um SaaS como o Flutz: operação centralizada, presença digital e dados isolados por empresa — e o tutor chega sem pagar mensalidade da plataforma."
           />
         </FadeIn>
         <div className="mt-12 grid grid-cols-1 gap-10 lg:grid-cols-2">

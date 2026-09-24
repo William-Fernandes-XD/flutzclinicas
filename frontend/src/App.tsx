@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes } from "react-router-dom";
+import { DocumentHead } from "./components/DocumentHead";
 import { AppShell } from "./components/layout/AppShell";
 import { MarketingLayout } from "./components/layout/MarketingLayout";
 import { RequireAuth } from "./components/RequireAuth";
@@ -57,7 +58,9 @@ import { TermosPage } from "./pages/legal/TermosPage";
 
 export default function App() {
   return (
-    <Routes>
+    <>
+      <DocumentHead />
+      <Routes>
       <Route path="/clinica/:slug" element={<ClinicaPublicaPage />} />
 
       <Route
@@ -173,5 +176,6 @@ export default function App() {
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>
+    </>
   );
 }
