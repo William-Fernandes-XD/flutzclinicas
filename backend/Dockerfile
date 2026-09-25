@@ -20,4 +20,14 @@ USER flutz
 
 EXPOSE 8080
 
-ENTRYPOINT ["java", "-jar", "/app/app.jar"]
+# ExitOnOutOfMemoryError: se a JVM ficar sem heap, ela sai em vez de ficar zumbi.
+# O container sobe de novo sozinho (restart no compose). SIGKILL do sistema
+# operacional não passa por aqui — por isso não há linha no log da aplicação.
+ENTRYPOINT ["java", \
+  "-XX:+ExitOnOutOfMemoryError", \
+  "-XX:+HeapDumpOnOutOfMemoryError", \
+  "-XX:HeapDumpPath=/tmp", \
+  "-XX:ErrorFile=/tmp/hs_err_flutz.log", \
+  "-Xms256m", \
+  "-Xmx512m", \
+  "-jar", "/app/app.jar"]

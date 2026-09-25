@@ -80,15 +80,19 @@ public class SupportService {
                 mensagem
         );
         avisarAdministracao(auth, contato, motivo, mensagem);
-        notifications.notificarTicketSuporte(
-                criado.id(),
-                auth.empresaId(),
-                origem(auth.tipo().name()),
-                contato.nome(),
-                clinicaNome(auth.empresaId()),
-                motivo,
-                mensagem
-        );
+        try {
+            notifications.notificarTicketSuporte(
+                    criado.id(),
+                    auth.empresaId(),
+                    origem(auth.tipo().name()),
+                    contato.nome(),
+                    clinicaNome(auth.empresaId()),
+                    motivo,
+                    mensagem
+            );
+        } catch (Exception ex) {
+            log.warn("Ticket {} gravado, mas a notificação in-app falhou: {}", criado.id(), ex.toString());
+        }
         return criado;
     }
 

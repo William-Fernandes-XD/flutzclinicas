@@ -866,8 +866,9 @@ public class AgendaService {
     public VacinaOferta salvarPrecoVacina(Integer empresaVacinaId, BigDecimal preco) {
         exigirGestao();
         Integer empresaId = clinic.empresaAtual().getId();
-        if (preco == null || preco.compareTo(BigDecimal.ZERO) < 0) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Informe um preço válido para a vacina");
+        if (preco == null || preco.compareTo(BigDecimal.ZERO) < 0
+                || preco.compareTo(new BigDecimal("99999999.99")) > 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Informe um preço entre 0 e 99.999.999,99");
         }
         int n = jdbc.update(
                 "UPDATE flutz.empresa_vacina SET preco = ? WHERE empresa_vacina_id = ? AND empresa_id = ?",

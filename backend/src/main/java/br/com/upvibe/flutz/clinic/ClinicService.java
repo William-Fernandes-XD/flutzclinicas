@@ -293,8 +293,9 @@ public class ClinicService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tipo de serviço inválido")));
         servico.setNomeExibicao(blank(req.nomeExibicao()));
         servico.setDescricao(blank(req.descricao()));
-        if (req.preco() == null || req.preco().compareTo(java.math.BigDecimal.ZERO) < 0) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Informe o preço do serviço");
+        if (req.preco() == null || req.preco().compareTo(java.math.BigDecimal.ZERO) < 0
+                || req.preco().compareTo(new java.math.BigDecimal("99999999.99")) > 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Informe um preço entre 0 e 99.999.999,99");
         }
         servico.setPreco(req.preco());
         servico.setDuracaoMinutos(req.duracaoMinutos());

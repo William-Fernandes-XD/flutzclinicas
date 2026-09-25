@@ -12,6 +12,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -361,6 +362,8 @@ public class NotificationService {
         );
     }
 
+    /** Transação própria: falha de aviso não desfaz o ticket já inserido. */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void notificarTicketSuporte(
             Integer ticketId,
             Integer empresaId,
