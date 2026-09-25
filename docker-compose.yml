@@ -72,15 +72,19 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        # URL relativa: o nginx do frontend faz proxy de /api → backend (SSE/cookies)
+        # URL relativa: o nginx do frontend faz proxy de /api → backend.
+        # Domínio fixo: o .env local tem localhost e a imagem saía com a versão de desenvolvimento.
         VITE_API_URL: ""
-        VITE_SITE_URL: ${VITE_SITE_URL:-http://localhost:5173}
+        VITE_SITE_URL: https://flutzclinicas.com.br
         VITE_APP_NAME: ${VITE_APP_NAME:-Flutz}
         VITE_COMPANY_NAME: ${VITE_COMPANY_NAME:-UpVibe}
         VITE_COMPANY_URL: ${VITE_COMPANY_URL:-https://www.upvibe.blog.br/}
-        VITE_PLANO_BASICO: ${VITE_PLANO_BASICO:-R$ 99,90/mês}
-        VITE_PLANO_PROFISSIONAL: ${VITE_PLANO_PROFISSIONAL:-R$ 199,90/mês}
-        VITE_PLANO_PREMIUM: ${VITE_PLANO_PREMIUM:-R$ 299,90/mês}
+        VITE_CONTACT_EMAIL: ${VITE_CONTACT_EMAIL:-contato@flutzclinicas.com.br}
+        VITE_CONTACT_WHATSAPP: ${VITE_CONTACT_WHATSAPP:-62981451856}
+        VITE_INSTAGRAM_URL: ${VITE_INSTAGRAM_URL:-https://www.instagram.com/flutzclinicas/}
+        VITE_DPO_NOME: ${VITE_DPO_NOME:-UpVibe}
+        VITE_DPO_EMAIL: ${VITE_DPO_EMAIL:-privacy@flutzclinicas.com.br}
+        VITE_PLANO_FLUTZ: ${VITE_PLANO_FLUTZ:-R$ 149,90/mês}
     profiles: ["frontend"]
     depends_on:
       - backend
